@@ -1,0 +1,9 @@
+.git
+.gitignore
+.idea
+.vscode
+bin
+dist
+coverage.out
+tmp
+*.log
