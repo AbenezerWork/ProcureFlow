@@ -28,6 +28,7 @@ The project is organized around four boundaries:
 ## Running locally
 
 ```bash
+go run ./cmd/migrate up
 go run ./cmd/api
 ```
 
@@ -45,7 +46,7 @@ curl http://localhost:8080/healthz
 
 ## Running with Docker
 
-The repository includes a multi-stage `Dockerfile` for the API and a `compose.yaml` stack that starts both the API and PostgreSQL.
+The repository includes a multi-stage `Dockerfile` for the API and migration binaries, plus a `compose.yaml` stack that starts PostgreSQL, runs migrations, and then starts the API.
 
 ```bash
 docker compose up --build
@@ -76,3 +77,25 @@ The application now also reads database settings from environment variables so t
 The initial product-to-backend mapping is documented in `docs/phase1-foundation.md`.
 
 Database schema changes should be added as raw SQL migrations under `db/migrations`.
+
+## Database tooling
+
+The repository uses:
+
+- embedded Go migrations via `cmd/migrate`
+- `sqlc` generated query code under `internal/infrastructure/database/sqlc`
+- `pgx/v5` for the PostgreSQL runtime connection and transactions
+
+Useful commands:
+
+```bash
+sqlc generate
+go run ./cmd/migrate up
+go run ./cmd/migrate version
+```
+
+The API does not auto-run migrations on startup. Apply them explicitly in local development and CI.
+
+## Docker workflow
+
+`docker compose up --build` now runs a one-shot `migrate` service before the API starts.

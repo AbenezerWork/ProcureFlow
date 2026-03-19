@@ -23,7 +23,12 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	app := bootstrap.New(cfg, version)
+	app, err := bootstrap.New(ctx, cfg, version)
+	if err != nil {
+		slog.Error("initialize application", "error", err)
+		os.Exit(1)
+	}
+
 	if err := app.Run(ctx); err != nil {
 		slog.Error("run application", "error", err)
 		os.Exit(1)

@@ -6,6 +6,8 @@ services:
     image: procureflow-api:local
     container_name: procureflow-api
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
     environment:
@@ -21,6 +23,24 @@ services:
     ports:
       - "8080:8080"
     restart: unless-stopped
+
+  migrate:
+    image: procureflow-api:local
+    container_name: procureflow-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_ENV: docker
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: procureflow
+      DB_PASSWORD: procureflow
+      DB_NAME: procureflow
+      DB_SSLMODE: disable
+    entrypoint: ["/app/procureflow-migrate"]
+    command: ["up"]
+    restart: "no"
 
   postgres:
     image: postgres:18-alpine
