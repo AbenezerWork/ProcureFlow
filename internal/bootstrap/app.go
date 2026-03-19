@@ -5,8 +5,12 @@ import (
 	"fmt"
 
 	applicationhealth "github.com/AbenezerWork/ProcureFlow/internal/application/health"
+	applicationidentity "github.com/AbenezerWork/ProcureFlow/internal/application/identity"
+	applicationorganization "github.com/AbenezerWork/ProcureFlow/internal/application/organization"
+	authinfra "github.com/AbenezerWork/ProcureFlow/internal/infrastructure/auth"
 	"github.com/AbenezerWork/ProcureFlow/internal/infrastructure/config"
 	"github.com/AbenezerWork/ProcureFlow/internal/infrastructure/database"
+	dbrepositories "github.com/AbenezerWork/ProcureFlow/internal/infrastructure/database/repositories"
 	"github.com/AbenezerWork/ProcureFlow/internal/infrastructure/httpserver"
 	"github.com/AbenezerWork/ProcureFlow/internal/interfaces/http/handlers"
 	httpmiddleware "github.com/AbenezerWork/ProcureFlow/internal/interfaces/http/middleware"
@@ -26,9 +30,23 @@ func New(ctx context.Context, cfg config.Config, version string) (*App, error) {
 	}
 
 	store := database.NewStore(pool)
+	passwordHasher := authinfra.NewPasswordHasher()
+	tokenManager := authinfra.NewTokenManager(cfg.Auth)
+	identityRepository := dbrepositories.NewIdentityRepository(store)
+	organizationRepository := dbrepositories.NewOrganizationRepository(store)
 	healthService := applicationhealth.NewService(cfg.AppName, cfg.Environment, version)
+	identityService := applicationidentity.NewService(identityRepository, passwordHasher, tokenManager)
+	organizationService := applicationorganization.NewService(organizationRepository, organizationRepository)
 	healthHandler := handlers.NewHealthHandler(healthService, httpmiddleware.TenantFromContext)
-	router := httprouter.New(healthHandler, cfg.TenantHeader)
+	authHandler := handlers.NewAuthHandler(identityService)
+	organizationHandler := handlers.NewOrganizationHandler(organizationService)
+	router := httprouter.New(
+		healthHandler,
+		authHandler,
+		organizationHandler,
+		httpmiddleware.RequireAuthentication(identityService),
+		cfg.TenantHeader,
+	)
 	server := httpserver.New(cfg.HTTPAddress, router, cfg.ShutdownTimeout)
 
 	return &App{

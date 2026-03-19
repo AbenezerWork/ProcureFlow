@@ -13,6 +13,9 @@ const (
 	defaultHTTPAddress     = ":8080"
 	defaultShutdownTimeout = 10 * time.Second
 	defaultTenantHeader    = "X-Tenant-ID"
+	defaultJWTIssuer       = "procureflow-api"
+	defaultJWTSecret       = "procureflow-development-secret"
+	defaultAccessTokenTTL  = 24 * time.Hour
 	defaultDBHost          = "localhost"
 	defaultDBPort          = 5432
 	defaultDBUser          = "procureflow"
@@ -27,7 +30,14 @@ type Config struct {
 	HTTPAddress     string
 	ShutdownTimeout time.Duration
 	TenantHeader    string
+	Auth            AuthConfig
 	Database        DatabaseConfig
+}
+
+type AuthConfig struct {
+	JWTIssuer      string
+	JWTSecret      string
+	AccessTokenTTL time.Duration
 }
 
 type DatabaseConfig struct {
@@ -61,6 +71,15 @@ func Load() (Config, error) {
 		shutdownTimeout = parsed
 	}
 
+	accessTokenTTL := defaultAccessTokenTTL
+	if raw := os.Getenv("AUTH_ACCESS_TOKEN_TTL"); raw != "" {
+		parsed, err := time.ParseDuration(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("parse AUTH_ACCESS_TOKEN_TTL: %w", err)
+		}
+		accessTokenTTL = parsed
+	}
+
 	dbPort, err := intFromEnv("DB_PORT", defaultDBPort)
 	if err != nil {
 		return Config{}, err
@@ -72,6 +91,11 @@ func Load() (Config, error) {
 		HTTPAddress:     valueOrDefault("APP_HTTP_ADDRESS", defaultHTTPAddress),
 		ShutdownTimeout: shutdownTimeout,
 		TenantHeader:    valueOrDefault("APP_TENANT_HEADER", defaultTenantHeader),
+		Auth: AuthConfig{
+			JWTIssuer:      valueOrDefault("AUTH_JWT_ISSUER", defaultJWTIssuer),
+			JWTSecret:      valueOrDefault("AUTH_JWT_SECRET", defaultJWTSecret),
+			AccessTokenTTL: accessTokenTTL,
+		},
 		Database: DatabaseConfig{
 			Host:     valueOrDefault("DB_HOST", defaultDBHost),
 			Port:     dbPort,
