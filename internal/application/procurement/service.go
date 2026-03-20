@@ -70,8 +70,11 @@ type Repository interface {
 	CreateRequest(ctx context.Context, params CreateRequestParams) (domainprocurement.Request, error)
 	GetRequest(ctx context.Context, organizationID, requestID uuid.UUID) (domainprocurement.Request, error)
 	ListRequests(ctx context.Context, organizationID uuid.UUID, status *domainprocurement.RequestStatus) ([]domainprocurement.Request, error)
+	ListApprovalInbox(ctx context.Context, organizationID uuid.UUID) ([]domainprocurement.Request, error)
 	UpdateDraftRequest(ctx context.Context, params UpdateRequestParams) (domainprocurement.Request, error)
 	SubmitRequest(ctx context.Context, organizationID, requestID, submittedByUserID uuid.UUID) (domainprocurement.Request, error)
+	ApproveRequest(ctx context.Context, organizationID, requestID, approvedByUserID uuid.UUID, decisionComment *string) (domainprocurement.Request, error)
+	RejectRequest(ctx context.Context, organizationID, requestID, rejectedByUserID uuid.UUID, decisionComment *string) (domainprocurement.Request, error)
 	CancelRequest(ctx context.Context, organizationID, requestID, cancelledByUserID uuid.UUID) (domainprocurement.Request, error)
 	CreateItem(ctx context.Context, params CreateItemParams) (domainprocurement.Item, error)
 	ListItems(ctx context.Context, organizationID, requestID uuid.UUID) ([]domainprocurement.Item, error)
@@ -96,6 +99,11 @@ type ListRequestsInput struct {
 	Status         *domainprocurement.RequestStatus
 }
 
+type ListApprovalInboxInput struct {
+	OrganizationID uuid.UUID
+	CurrentUser    uuid.UUID
+}
+
 type UpdateRequestInput struct {
 	OrganizationID       uuid.UUID
 	RequestID            uuid.UUID
@@ -111,6 +119,13 @@ type SubmitRequestInput struct {
 	OrganizationID uuid.UUID
 	RequestID      uuid.UUID
 	CurrentUser    uuid.UUID
+}
+
+type DecisionInput struct {
+	OrganizationID  uuid.UUID
+	RequestID       uuid.UUID
+	CurrentUser     uuid.UUID
+	DecisionComment *string
 }
 
 type CancelRequestInput struct {
@@ -209,6 +224,27 @@ func (s Service) ListRequests(ctx context.Context, input ListRequestsInput) ([]d
 	requests, err := s.repo.ListRequests(ctx, input.OrganizationID, input.Status)
 	if err != nil {
 		return nil, fmt.Errorf("list procurement requests: %w", err)
+	}
+
+	return requests, nil
+}
+
+func (s Service) ListApprovalInbox(ctx context.Context, input ListApprovalInboxInput) ([]domainprocurement.Request, error) {
+	if input.OrganizationID == uuid.Nil || input.CurrentUser == uuid.Nil {
+		return nil, ErrInvalidProcurementRequest
+	}
+
+	membership, err := s.loadActiveMembership(ctx, input.OrganizationID, input.CurrentUser)
+	if err != nil {
+		return nil, err
+	}
+	if !canApproveRequest(membership.Role) {
+		return nil, ErrForbiddenProcurement
+	}
+
+	requests, err := s.repo.ListApprovalInbox(ctx, input.OrganizationID)
+	if err != nil {
+		return nil, fmt.Errorf("list approval inbox: %w", err)
 	}
 
 	return requests, nil
@@ -318,6 +354,62 @@ func (s Service) SubmitRequest(ctx context.Context, input SubmitRequestInput) (d
 	}
 
 	return submitted, nil
+}
+
+func (s Service) ApproveRequest(ctx context.Context, input DecisionInput) (domainprocurement.Request, error) {
+	if input.OrganizationID == uuid.Nil || input.RequestID == uuid.Nil || input.CurrentUser == uuid.Nil {
+		return domainprocurement.Request{}, ErrInvalidProcurementRequest
+	}
+
+	request, membership, err := s.loadMutableRequest(ctx, input.OrganizationID, input.RequestID, input.CurrentUser)
+	if err != nil {
+		return domainprocurement.Request{}, err
+	}
+	if !canApproveRequest(membership.Role) {
+		return domainprocurement.Request{}, ErrForbiddenProcurement
+	}
+	if request.Status != domainprocurement.RequestStatusSubmitted {
+		return domainprocurement.Request{}, ErrInvalidProcurementRequest
+	}
+
+	approved, err := s.repo.ApproveRequest(ctx, input.OrganizationID, input.RequestID, input.CurrentUser, normalizeOptional(input.DecisionComment))
+	if err != nil {
+		if errors.Is(err, ErrProcurementRequestNotFound) {
+			return domainprocurement.Request{}, err
+		}
+
+		return domainprocurement.Request{}, fmt.Errorf("approve procurement request: %w", err)
+	}
+
+	return approved, nil
+}
+
+func (s Service) RejectRequest(ctx context.Context, input DecisionInput) (domainprocurement.Request, error) {
+	if input.OrganizationID == uuid.Nil || input.RequestID == uuid.Nil || input.CurrentUser == uuid.Nil {
+		return domainprocurement.Request{}, ErrInvalidProcurementRequest
+	}
+
+	request, membership, err := s.loadMutableRequest(ctx, input.OrganizationID, input.RequestID, input.CurrentUser)
+	if err != nil {
+		return domainprocurement.Request{}, err
+	}
+	if !canApproveRequest(membership.Role) {
+		return domainprocurement.Request{}, ErrForbiddenProcurement
+	}
+	if request.Status != domainprocurement.RequestStatusSubmitted {
+		return domainprocurement.Request{}, ErrInvalidProcurementRequest
+	}
+
+	rejected, err := s.repo.RejectRequest(ctx, input.OrganizationID, input.RequestID, input.CurrentUser, normalizeOptional(input.DecisionComment))
+	if err != nil {
+		if errors.Is(err, ErrProcurementRequestNotFound) {
+			return domainprocurement.Request{}, err
+		}
+
+		return domainprocurement.Request{}, fmt.Errorf("reject procurement request: %w", err)
+	}
+
+	return rejected, nil
 }
 
 func (s Service) CancelRequest(ctx context.Context, input CancelRequestInput) (domainprocurement.Request, error) {
@@ -670,6 +762,17 @@ func canManageAnyRequest(role domainorganization.MembershipRole) bool {
 	case domainorganization.MembershipRoleOwner,
 		domainorganization.MembershipRoleAdmin,
 		domainorganization.MembershipRoleProcurementOfficer:
+		return true
+	default:
+		return false
+	}
+}
+
+func canApproveRequest(role domainorganization.MembershipRole) bool {
+	switch role {
+	case domainorganization.MembershipRoleOwner,
+		domainorganization.MembershipRoleAdmin,
+		domainorganization.MembershipRoleApprover:
 		return true
 	default:
 		return false

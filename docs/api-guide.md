@@ -1,6 +1,6 @@
 # API Guide
 
-This guide summarizes the currently implemented API surface and the authorization rules around organization, vendor, and procurement request management.
+This guide summarizes the currently implemented API surface and the authorization rules around organization, vendor, procurement request, and approval management.
 
 ## Base URLs
 
@@ -47,9 +47,12 @@ Authorization: Bearer <access-token>
 - `POST /api/v1/organizations/{organizationID}/vendors/{vendorID}/archive`
 - `GET /api/v1/organizations/{organizationID}/procurement-requests/`
 - `POST /api/v1/organizations/{organizationID}/procurement-requests/`
+- `GET /api/v1/organizations/{organizationID}/approvals/procurement-requests/`
 - `GET /api/v1/organizations/{organizationID}/procurement-requests/{requestID}`
 - `PATCH /api/v1/organizations/{organizationID}/procurement-requests/{requestID}`
 - `POST /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/submit`
+- `POST /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/approve`
+- `POST /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/reject`
 - `POST /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/cancel`
 - `GET /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/items`
 - `POST /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/items`
@@ -88,6 +91,8 @@ Authorization: Bearer <access-token>
 - Any active organization member can list and get procurement requests and request items.
 - `owner`, `admin`, `procurement_officer`, and `requester` can create procurement request drafts.
 - Draft updates, item writes, submit, and cancel are allowed for manager roles or the original requester on their own request.
+- Only active `owner`, `admin`, and `approver` memberships can access the procurement approval inbox.
+- Only active `owner`, `admin`, and `approver` memberships can approve or reject submitted procurement requests.
 
 ## Manual test flow
 
@@ -223,4 +228,32 @@ Submit a draft request:
 curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/procurement-requests/$REQUEST_ID/submit \
   -H "X-Tenant-ID: $ORG_ID" \
   -H "Authorization: Bearer $TOKEN"
+```
+
+List the approval inbox as an approver:
+
+```bash
+curl http://localhost:8080/api/v1/organizations/$ORG_ID/approvals/procurement-requests/ \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $APPROVER_TOKEN"
+```
+
+Approve a submitted request:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/procurement-requests/$REQUEST_ID/approve \
+  -H 'Content-Type: application/json' \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $APPROVER_TOKEN" \
+  -d '{"decision_comment":"Approved for vendor sourcing"}'
+```
+
+Reject a submitted request:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/procurement-requests/$REQUEST_ID/reject \
+  -H 'Content-Type: application/json' \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $APPROVER_TOKEN" \
+  -d '{"decision_comment":"Insufficient business justification"}'
 ```

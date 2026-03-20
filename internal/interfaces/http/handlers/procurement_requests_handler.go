@@ -15,9 +15,12 @@ import (
 type ProcurementService interface {
 	CreateRequest(ctx context.Context, input applicationprocurement.CreateRequestInput) (domainprocurement.Request, error)
 	ListRequests(ctx context.Context, input applicationprocurement.ListRequestsInput) ([]domainprocurement.Request, error)
+	ListApprovalInbox(ctx context.Context, input applicationprocurement.ListApprovalInboxInput) ([]domainprocurement.Request, error)
 	GetRequest(ctx context.Context, organizationID, requestID, currentUser uuid.UUID) (domainprocurement.Request, error)
 	UpdateRequest(ctx context.Context, input applicationprocurement.UpdateRequestInput) (domainprocurement.Request, error)
 	SubmitRequest(ctx context.Context, input applicationprocurement.SubmitRequestInput) (domainprocurement.Request, error)
+	ApproveRequest(ctx context.Context, input applicationprocurement.DecisionInput) (domainprocurement.Request, error)
+	RejectRequest(ctx context.Context, input applicationprocurement.DecisionInput) (domainprocurement.Request, error)
 	CancelRequest(ctx context.Context, input applicationprocurement.CancelRequestInput) (domainprocurement.Request, error)
 	ListItems(ctx context.Context, organizationID, requestID, currentUser uuid.UUID) ([]domainprocurement.Item, error)
 	CreateItem(ctx context.Context, input applicationprocurement.CreateItemInput) (domainprocurement.Item, error)
@@ -47,6 +50,10 @@ type updateProcurementRequestRequest struct {
 	Justification        *string `json:"justification"`
 	CurrencyCode         *string `json:"currency_code"`
 	EstimatedTotalAmount *string `json:"estimated_total_amount"`
+}
+
+type procurementDecisionRequest struct {
+	DecisionComment *string `json:"decision_comment"`
 }
 
 type createProcurementItemRequest struct {
@@ -126,6 +133,29 @@ func (h *ProcurementHandler) ListRequests(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]any{"procurement_requests": response})
 }
 
+func (h *ProcurementHandler) ListApprovalInbox(w http.ResponseWriter, r *http.Request) {
+	currentUser, organizationID, ok := authenticatedOrganizationRequest(w, r)
+	if !ok {
+		return
+	}
+
+	requests, err := h.service.ListApprovalInbox(r.Context(), applicationprocurement.ListApprovalInboxInput{
+		OrganizationID: organizationID,
+		CurrentUser:    currentUser,
+	})
+	if err != nil {
+		writeProcurementError(w, err, "list approval inbox")
+		return
+	}
+
+	response := make([]map[string]any, 0, len(requests))
+	for _, request := range requests {
+		response = append(response, procurementRequestResponse(request))
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"procurement_requests": response})
+}
+
 func (h *ProcurementHandler) GetRequest(w http.ResponseWriter, r *http.Request) {
 	currentUser, organizationID, requestID, ok := authenticatedProcurementRequest(w, r)
 	if !ok {
@@ -184,6 +214,58 @@ func (h *ProcurementHandler) SubmitRequest(w http.ResponseWriter, r *http.Reques
 	})
 	if err != nil {
 		writeProcurementError(w, err, "submit procurement request")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, procurementRequestResponse(procurementRequest))
+}
+
+func (h *ProcurementHandler) ApproveRequest(w http.ResponseWriter, r *http.Request) {
+	currentUser, organizationID, requestID, ok := authenticatedProcurementRequest(w, r)
+	if !ok {
+		return
+	}
+
+	var request procurementDecisionRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	procurementRequest, err := h.service.ApproveRequest(r.Context(), applicationprocurement.DecisionInput{
+		OrganizationID:  organizationID,
+		RequestID:       requestID,
+		CurrentUser:     currentUser,
+		DecisionComment: request.DecisionComment,
+	})
+	if err != nil {
+		writeProcurementError(w, err, "approve procurement request")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, procurementRequestResponse(procurementRequest))
+}
+
+func (h *ProcurementHandler) RejectRequest(w http.ResponseWriter, r *http.Request) {
+	currentUser, organizationID, requestID, ok := authenticatedProcurementRequest(w, r)
+	if !ok {
+		return
+	}
+
+	var request procurementDecisionRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	procurementRequest, err := h.service.RejectRequest(r.Context(), applicationprocurement.DecisionInput{
+		OrganizationID:  organizationID,
+		RequestID:       requestID,
+		CurrentUser:     currentUser,
+		DecisionComment: request.DecisionComment,
+	})
+	if err != nil {
+		writeProcurementError(w, err, "reject procurement request")
 		return
 	}
 

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: ProcureFlow API
-  version: 0.2.1
+  version: 0.2.2
   description: |
     OpenAPI document for the currently implemented ProcureFlow backend endpoints.
 
@@ -12,7 +12,7 @@ info:
     - membership list, create, and update
     - dedicated ownership transfer for owner changes
     - role enforcement for `owner` and `admin` management flows
-    - procurement request drafts, items, submit, and cancel
+    - procurement request drafts, items, submit, approve, reject, and cancel
 
     Organization-scoped protected routes require the `X-Tenant-ID` header to
     match the target organization ID.
@@ -30,6 +30,8 @@ tags:
     description: Organization-scoped vendor management.
   - name: Procurement
     description: Organization-scoped procurement request and draft-item management.
+  - name: Approvals
+    description: Organization-scoped approval inbox and procurement approval decisions.
 paths:
   /healthz:
     get:
@@ -931,6 +933,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/approvals/procurement-requests:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+    get:
+      tags: [Approvals]
+      summary: List submitted procurement requests awaiting approval
+      description: Lists submitted procurement requests for the approval inbox. Active `owner`, `admin`, and `approver` memberships may perform this action.
+      operationId: listProcurementApprovalInbox
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Submitted procurement requests awaiting approval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListProcurementRequestsResponse'
+        '400':
+          description: Invalid organization identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot access the approval inbox for this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/organizations/{organizationID}/procurement-requests:
     parameters:
       - $ref: '#/components/parameters/OrganizationID'
@@ -1137,6 +1175,104 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: User cannot submit this procurement request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Procurement request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/approve:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RequestID'
+    post:
+      tags: [Approvals]
+      summary: Approve a submitted procurement request
+      description: Approves a submitted procurement request. Active `owner`, `admin`, and `approver` memberships may perform this action.
+      operationId: approveProcurementRequest
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcurementDecisionRequest'
+      responses:
+        '200':
+          description: Approved procurement request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcurementRequestResponse'
+        '400':
+          description: Invalid procurement request transition or request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot approve procurement requests in this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Procurement request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/reject:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RequestID'
+    post:
+      tags: [Approvals]
+      summary: Reject a submitted procurement request
+      description: Rejects a submitted procurement request. Active `owner`, `admin`, and `approver` memberships may perform this action.
+      operationId: rejectProcurementRequest
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcurementDecisionRequest'
+      responses:
+        '200':
+          description: Rejected procurement request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcurementRequestResponse'
+        '400':
+          description: Invalid procurement request transition or request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot reject procurement requests in this organization
           content:
             application/json:
               schema:
@@ -1949,6 +2085,12 @@ components:
         currency_code:
           type: string
         estimated_total_amount:
+          type: string
+    ProcurementDecisionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        decision_comment:
           type: string
     ProcurementRequestResponse:
       type: object

@@ -83,6 +83,20 @@ func (r *ProcurementRepository) ListRequests(ctx context.Context, organizationID
 	return requests, nil
 }
 
+func (r *ProcurementRepository) ListApprovalInbox(ctx context.Context, organizationID uuid.UUID) ([]domainprocurement.Request, error) {
+	rows, err := r.store.ListApprovalInboxRequests(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
+
+	requests := make([]domainprocurement.Request, 0, len(rows))
+	for _, row := range rows {
+		requests = append(requests, mapProcurementRequest(row))
+	}
+
+	return requests, nil
+}
+
 func (r *ProcurementRepository) UpdateDraftRequest(ctx context.Context, params applicationprocurement.UpdateRequestParams) (domainprocurement.Request, error) {
 	amount, err := parseNumeric(params.EstimatedTotalAmount)
 	if err != nil {
@@ -114,6 +128,42 @@ func (r *ProcurementRepository) SubmitRequest(ctx context.Context, organizationI
 		OrganizationID:    organizationID,
 		ID:                requestID,
 		SubmittedByUserID: &submittedByUserID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domainprocurement.Request{}, applicationprocurement.ErrProcurementRequestNotFound
+		}
+
+		return domainprocurement.Request{}, err
+	}
+
+	return mapProcurementRequest(request), nil
+}
+
+func (r *ProcurementRepository) ApproveRequest(ctx context.Context, organizationID, requestID, approvedByUserID uuid.UUID, decisionComment *string) (domainprocurement.Request, error) {
+	request, err := r.store.ApproveProcurementRequest(ctx, sqlc.ApproveProcurementRequestParams{
+		OrganizationID:   organizationID,
+		ID:               requestID,
+		ApprovedByUserID: &approvedByUserID,
+		DecisionComment:  decisionComment,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domainprocurement.Request{}, applicationprocurement.ErrProcurementRequestNotFound
+		}
+
+		return domainprocurement.Request{}, err
+	}
+
+	return mapProcurementRequest(request), nil
+}
+
+func (r *ProcurementRepository) RejectRequest(ctx context.Context, organizationID, requestID, rejectedByUserID uuid.UUID, decisionComment *string) (domainprocurement.Request, error) {
+	request, err := r.store.RejectProcurementRequest(ctx, sqlc.RejectProcurementRequestParams{
+		OrganizationID:   organizationID,
+		ID:               requestID,
+		RejectedByUserID: &rejectedByUserID,
+		DecisionComment:  decisionComment,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

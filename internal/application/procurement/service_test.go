@@ -12,17 +12,20 @@ import (
 )
 
 type fakeRepository struct {
-	createRequestFn func(context.Context, CreateRequestParams) (domainprocurement.Request, error)
-	getRequestFn    func(context.Context, uuid.UUID, uuid.UUID) (domainprocurement.Request, error)
-	listRequestsFn  func(context.Context, uuid.UUID, *domainprocurement.RequestStatus) ([]domainprocurement.Request, error)
-	updateRequestFn func(context.Context, UpdateRequestParams) (domainprocurement.Request, error)
-	submitRequestFn func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (domainprocurement.Request, error)
-	cancelRequestFn func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (domainprocurement.Request, error)
-	createItemFn    func(context.Context, CreateItemParams) (domainprocurement.Item, error)
-	listItemsFn     func(context.Context, uuid.UUID, uuid.UUID) ([]domainprocurement.Item, error)
-	updateItemFn    func(context.Context, UpdateItemParams) (domainprocurement.Item, error)
-	deleteItemFn    func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error
-	getMembershipFn func(context.Context, uuid.UUID, uuid.UUID) (domainorganization.Membership, error)
+	createRequestFn  func(context.Context, CreateRequestParams) (domainprocurement.Request, error)
+	getRequestFn     func(context.Context, uuid.UUID, uuid.UUID) (domainprocurement.Request, error)
+	listRequestsFn   func(context.Context, uuid.UUID, *domainprocurement.RequestStatus) ([]domainprocurement.Request, error)
+	listInboxFn      func(context.Context, uuid.UUID) ([]domainprocurement.Request, error)
+	updateRequestFn  func(context.Context, UpdateRequestParams) (domainprocurement.Request, error)
+	submitRequestFn  func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (domainprocurement.Request, error)
+	approveRequestFn func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, *string) (domainprocurement.Request, error)
+	rejectRequestFn  func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, *string) (domainprocurement.Request, error)
+	cancelRequestFn  func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (domainprocurement.Request, error)
+	createItemFn     func(context.Context, CreateItemParams) (domainprocurement.Item, error)
+	listItemsFn      func(context.Context, uuid.UUID, uuid.UUID) ([]domainprocurement.Item, error)
+	updateItemFn     func(context.Context, UpdateItemParams) (domainprocurement.Item, error)
+	deleteItemFn     func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error
+	getMembershipFn  func(context.Context, uuid.UUID, uuid.UUID) (domainorganization.Membership, error)
 }
 
 func (f fakeRepository) CreateRequest(ctx context.Context, params CreateRequestParams) (domainprocurement.Request, error) {
@@ -34,11 +37,20 @@ func (f fakeRepository) GetRequest(ctx context.Context, organizationID, requestI
 func (f fakeRepository) ListRequests(ctx context.Context, organizationID uuid.UUID, status *domainprocurement.RequestStatus) ([]domainprocurement.Request, error) {
 	return f.listRequestsFn(ctx, organizationID, status)
 }
+func (f fakeRepository) ListApprovalInbox(ctx context.Context, organizationID uuid.UUID) ([]domainprocurement.Request, error) {
+	return f.listInboxFn(ctx, organizationID)
+}
 func (f fakeRepository) UpdateDraftRequest(ctx context.Context, params UpdateRequestParams) (domainprocurement.Request, error) {
 	return f.updateRequestFn(ctx, params)
 }
 func (f fakeRepository) SubmitRequest(ctx context.Context, organizationID, requestID, submittedByUserID uuid.UUID) (domainprocurement.Request, error) {
 	return f.submitRequestFn(ctx, organizationID, requestID, submittedByUserID)
+}
+func (f fakeRepository) ApproveRequest(ctx context.Context, organizationID, requestID, approvedByUserID uuid.UUID, decisionComment *string) (domainprocurement.Request, error) {
+	return f.approveRequestFn(ctx, organizationID, requestID, approvedByUserID, decisionComment)
+}
+func (f fakeRepository) RejectRequest(ctx context.Context, organizationID, requestID, rejectedByUserID uuid.UUID, decisionComment *string) (domainprocurement.Request, error) {
+	return f.rejectRequestFn(ctx, organizationID, requestID, rejectedByUserID, decisionComment)
 }
 func (f fakeRepository) CancelRequest(ctx context.Context, organizationID, requestID, cancelledByUserID uuid.UUID) (domainprocurement.Request, error) {
 	return f.cancelRequestFn(ctx, organizationID, requestID, cancelledByUserID)
@@ -223,6 +235,174 @@ func TestServiceCreateItemAssignsNextLineNumber(t *testing.T) {
 	}
 	if item.LineNumber != 4 {
 		t.Fatalf("expected line number 4, got %d", item.LineNumber)
+	}
+}
+
+func TestServiceListApprovalInboxAllowsApprover(t *testing.T) {
+	t.Parallel()
+
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	repo := fakeRepository{
+		getMembershipFn: func(_ context.Context, gotOrgID, gotUserID uuid.UUID) (domainorganization.Membership, error) {
+			if gotOrgID != orgID || gotUserID != userID {
+				t.Fatalf("unexpected membership lookup")
+			}
+			return domainorganization.Membership{
+				Role:   domainorganization.MembershipRoleApprover,
+				Status: domainorganization.MembershipStatusActive,
+			}, nil
+		},
+		listInboxFn: func(_ context.Context, gotOrgID uuid.UUID) ([]domainprocurement.Request, error) {
+			if gotOrgID != orgID {
+				t.Fatalf("unexpected org id: %s", gotOrgID)
+			}
+			return []domainprocurement.Request{{ID: uuid.New(), Status: domainprocurement.RequestStatusSubmitted}}, nil
+		},
+	}
+
+	service := NewService(repo)
+	requests, err := service.ListApprovalInbox(context.Background(), ListApprovalInboxInput{
+		OrganizationID: orgID,
+		CurrentUser:    userID,
+	})
+	if err != nil {
+		t.Fatalf("list approval inbox returned error: %v", err)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(requests))
+	}
+}
+
+func TestServiceApproveRequestRejectsRequesterRole(t *testing.T) {
+	t.Parallel()
+
+	orgID := uuid.New()
+	requestID := uuid.New()
+	userID := uuid.New()
+
+	repo := fakeRepository{
+		getMembershipFn: func(_ context.Context, _, _ uuid.UUID) (domainorganization.Membership, error) {
+			return domainorganization.Membership{
+				Role:   domainorganization.MembershipRoleRequester,
+				Status: domainorganization.MembershipStatusActive,
+			}, nil
+		},
+		getRequestFn: func(_ context.Context, _, _ uuid.UUID) (domainprocurement.Request, error) {
+			return domainprocurement.Request{
+				ID:             requestID,
+				OrganizationID: orgID,
+				Status:         domainprocurement.RequestStatusSubmitted,
+			}, nil
+		},
+		approveRequestFn: func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, *string) (domainprocurement.Request, error) {
+			t.Fatal("approve should not be called")
+			return domainprocurement.Request{}, nil
+		},
+	}
+
+	service := NewService(repo)
+	_, err := service.ApproveRequest(context.Background(), DecisionInput{
+		OrganizationID: orgID,
+		RequestID:      requestID,
+		CurrentUser:    userID,
+	})
+	if !errors.Is(err, ErrForbiddenProcurement) {
+		t.Fatalf("expected forbidden error, got %v", err)
+	}
+}
+
+func TestServiceApproveRequestAllowsApprover(t *testing.T) {
+	t.Parallel()
+
+	orgID := uuid.New()
+	requestID := uuid.New()
+	userID := uuid.New()
+	now := time.Now().UTC()
+	comment := "approved for next stage"
+
+	repo := fakeRepository{
+		getMembershipFn: func(_ context.Context, _, _ uuid.UUID) (domainorganization.Membership, error) {
+			return domainorganization.Membership{
+				Role:   domainorganization.MembershipRoleApprover,
+				Status: domainorganization.MembershipStatusActive,
+			}, nil
+		},
+		getRequestFn: func(_ context.Context, _, _ uuid.UUID) (domainprocurement.Request, error) {
+			return domainprocurement.Request{
+				ID:             requestID,
+				OrganizationID: orgID,
+				Status:         domainprocurement.RequestStatusSubmitted,
+			}, nil
+		},
+		approveRequestFn: func(_ context.Context, gotOrgID, gotRequestID, gotUserID uuid.UUID, gotComment *string) (domainprocurement.Request, error) {
+			if gotOrgID != orgID || gotRequestID != requestID || gotUserID != userID {
+				t.Fatalf("unexpected approve args")
+			}
+			if gotComment == nil || *gotComment != comment {
+				t.Fatalf("unexpected comment: %#v", gotComment)
+			}
+			return domainprocurement.Request{
+				ID:              requestID,
+				OrganizationID:  orgID,
+				Status:          domainprocurement.RequestStatusApproved,
+				DecisionComment: gotComment,
+				ApprovedAt:      &now,
+			}, nil
+		},
+	}
+
+	service := NewService(repo)
+	request, err := service.ApproveRequest(context.Background(), DecisionInput{
+		OrganizationID:  orgID,
+		RequestID:       requestID,
+		CurrentUser:     userID,
+		DecisionComment: &comment,
+	})
+	if err != nil {
+		t.Fatalf("approve request returned error: %v", err)
+	}
+	if request.Status != domainprocurement.RequestStatusApproved {
+		t.Fatalf("expected approved status, got %s", request.Status)
+	}
+}
+
+func TestServiceRejectRequestRequiresSubmittedStatus(t *testing.T) {
+	t.Parallel()
+
+	orgID := uuid.New()
+	requestID := uuid.New()
+	userID := uuid.New()
+
+	repo := fakeRepository{
+		getMembershipFn: func(_ context.Context, _, _ uuid.UUID) (domainorganization.Membership, error) {
+			return domainorganization.Membership{
+				Role:   domainorganization.MembershipRoleApprover,
+				Status: domainorganization.MembershipStatusActive,
+			}, nil
+		},
+		getRequestFn: func(_ context.Context, _, _ uuid.UUID) (domainprocurement.Request, error) {
+			return domainprocurement.Request{
+				ID:             requestID,
+				OrganizationID: orgID,
+				Status:         domainprocurement.RequestStatusDraft,
+			}, nil
+		},
+		rejectRequestFn: func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, *string) (domainprocurement.Request, error) {
+			t.Fatal("reject should not be called")
+			return domainprocurement.Request{}, nil
+		},
+	}
+
+	service := NewService(repo)
+	_, err := service.RejectRequest(context.Background(), DecisionInput{
+		OrganizationID: orgID,
+		RequestID:      requestID,
+		CurrentUser:    userID,
+	})
+	if !errors.Is(err, ErrInvalidProcurementRequest) {
+		t.Fatalf("expected invalid request error, got %v", err)
 	}
 }
 

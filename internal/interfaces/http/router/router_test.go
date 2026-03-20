@@ -97,6 +97,10 @@ func (stubProcurementHandler) ListRequests(w http.ResponseWriter, _ *http.Reques
 	w.WriteHeader(http.StatusOK)
 }
 
+func (stubProcurementHandler) ListApprovalInbox(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
 func (stubProcurementHandler) GetRequest(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
@@ -106,6 +110,14 @@ func (stubProcurementHandler) UpdateRequest(w http.ResponseWriter, _ *http.Reque
 }
 
 func (stubProcurementHandler) SubmitRequest(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func (stubProcurementHandler) ApproveRequest(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func (stubProcurementHandler) RejectRequest(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 

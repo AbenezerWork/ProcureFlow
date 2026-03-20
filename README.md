@@ -56,7 +56,7 @@ Implemented API areas:
 - organization memberships: list, create, update
 - organization ownership transfer: dedicated owner-to-member transfer flow
 - vendors: create, list, get, update, archive
-- procurement requests: draft create/list/get/update, item CRUD, submit, cancel
+- procurement requests: draft create/list/get/update, item CRUD, submit, approve, reject, cancel
 
 ## Running with Docker
 

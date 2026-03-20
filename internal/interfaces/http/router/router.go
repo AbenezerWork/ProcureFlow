@@ -36,9 +36,12 @@ type VendorRoutes interface {
 type ProcurementRoutes interface {
 	CreateRequest(http.ResponseWriter, *http.Request)
 	ListRequests(http.ResponseWriter, *http.Request)
+	ListApprovalInbox(http.ResponseWriter, *http.Request)
 	GetRequest(http.ResponseWriter, *http.Request)
 	UpdateRequest(http.ResponseWriter, *http.Request)
 	SubmitRequest(http.ResponseWriter, *http.Request)
+	ApproveRequest(http.ResponseWriter, *http.Request)
+	RejectRequest(http.ResponseWriter, *http.Request)
 	CancelRequest(http.ResponseWriter, *http.Request)
 	ListItems(http.ResponseWriter, *http.Request)
 	CreateItem(http.ResponseWriter, *http.Request)
@@ -82,6 +85,11 @@ func New(
 					r.Get("/", organizationHandler.Get)
 					r.Patch("/", organizationHandler.Update)
 					r.Post("/ownership-transfer", organizationHandler.TransferOwnership)
+					r.Route("/approvals", func(r chi.Router) {
+						r.Route("/procurement-requests", func(r chi.Router) {
+							r.Get("/", procurementHandler.ListApprovalInbox)
+						})
+					})
 					r.Route("/memberships", func(r chi.Router) {
 						r.Get("/", organizationHandler.ListMemberships)
 						r.Post("/", organizationHandler.CreateMembership)
@@ -103,6 +111,8 @@ func New(
 							r.Get("/", procurementHandler.GetRequest)
 							r.Patch("/", procurementHandler.UpdateRequest)
 							r.Post("/submit", procurementHandler.SubmitRequest)
+							r.Post("/approve", procurementHandler.ApproveRequest)
+							r.Post("/reject", procurementHandler.RejectRequest)
 							r.Post("/cancel", procurementHandler.CancelRequest)
 							r.Route("/items", func(r chi.Router) {
 								r.Get("/", procurementHandler.ListItems)

@@ -62,7 +62,7 @@ Completed means the slice exists in code, is wired through the running API where
 - [x] Enforced tenant context on organization-scoped protected routes using `X-Tenant-ID`
 - [x] Vendor module: CRUD, archive, and organization-scoped queries
 - [x] Procurement module: draft, items, submit, cancel
-- [ ] Approval module: approver inbox, approve, reject, comment
+- [x] Approval module: approver inbox, approve, reject, comment
 - [ ] RFQ module: create, publish, close, evaluate, cancel
 - [ ] Quotation module: draft, submit, reject, item pricing
 - [ ] Award module: award decision and award lookup
