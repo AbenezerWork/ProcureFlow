@@ -25,10 +25,19 @@ type OrganizationRoutes interface {
 	TransferOwnership(http.ResponseWriter, *http.Request)
 }
 
+type VendorRoutes interface {
+	Create(http.ResponseWriter, *http.Request)
+	List(http.ResponseWriter, *http.Request)
+	Get(http.ResponseWriter, *http.Request)
+	Update(http.ResponseWriter, *http.Request)
+	Archive(http.ResponseWriter, *http.Request)
+}
+
 func New(
 	healthHandler http.Handler,
 	authHandler AuthRoutes,
 	organizationHandler OrganizationRoutes,
+	vendorHandler VendorRoutes,
 	authMiddleware func(http.Handler) http.Handler,
 	tenantHeader string,
 ) http.Handler {
@@ -63,6 +72,15 @@ func New(
 						r.Get("/", organizationHandler.ListMemberships)
 						r.Post("/", organizationHandler.CreateMembership)
 						r.Patch("/{userID}", organizationHandler.UpdateMembership)
+					})
+					r.Route("/vendors", func(r chi.Router) {
+						r.Get("/", vendorHandler.List)
+						r.Post("/", vendorHandler.Create)
+						r.Route("/{vendorID}", func(r chi.Router) {
+							r.Get("/", vendorHandler.Get)
+							r.Patch("/", vendorHandler.Update)
+							r.Post("/archive", vendorHandler.Archive)
+						})
 					})
 				})
 			})

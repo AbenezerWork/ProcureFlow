@@ -25,6 +25,8 @@ tags:
     description: User registration, login, and current-user lookup.
   - name: Organizations
     description: Organization management and organization-scoped membership operations.
+  - name: Vendors
+    description: Organization-scoped vendor management.
 paths:
   /healthz:
     get:
@@ -708,6 +710,224 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/vendors:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+    get:
+      tags: [Vendors]
+      summary: List vendors for an organization
+      description: Lists vendors for the organization. Any active organization member may perform this action.
+      operationId: listVendors
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - active
+              - archived
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Vendors for the organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListVendorsResponse'
+        '400':
+          description: Invalid vendor filter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot access this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [Vendors]
+      summary: Create a vendor
+      description: Creates a vendor for the organization. Only active `owner`, `admin`, and `procurement_officer` memberships can perform this action.
+      operationId: createVendor
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVendorRequest'
+      responses:
+        '201':
+          description: Vendor created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorResponse'
+        '400':
+          description: Invalid vendor input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot create vendors in this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/vendors/{vendorID}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/VendorID'
+    get:
+      tags: [Vendors]
+      summary: Get a vendor
+      description: Returns a vendor for the organization. Any active organization member may perform this action.
+      operationId: getVendor
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Vendor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorResponse'
+        '400':
+          description: Invalid organization or vendor identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot access this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Vendor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      tags: [Vendors]
+      summary: Update a vendor
+      description: Updates vendor details. Only active `owner`, `admin`, and `procurement_officer` memberships can perform this action.
+      operationId: updateVendor
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateVendorRequest'
+      responses:
+        '200':
+          description: Updated vendor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorResponse'
+        '400':
+          description: Invalid vendor update
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot manage vendors in this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Vendor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/vendors/{vendorID}/archive:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/VendorID'
+    post:
+      tags: [Vendors]
+      summary: Archive a vendor
+      description: Archives a vendor. Only active `owner`, `admin`, and `procurement_officer` memberships can perform this action.
+      operationId: archiveVendor
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Archived vendor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorResponse'
+        '400':
+          description: Invalid organization or vendor identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot manage vendors in this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Vendor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   parameters:
     TenantHeader:
@@ -733,6 +953,13 @@ components:
         format: uuid
     UserID:
       name: userID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    VendorID:
+      name: vendorID
       in: path
       required: true
       schema:
@@ -1094,3 +1321,154 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrganizationMemberResponse'
+    CreateVendorRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        legal_name:
+          type: string
+        contact_name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        tax_identifier:
+          type: string
+        address_line1:
+          type: string
+        address_line2:
+          type: string
+        city:
+          type: string
+        state_region:
+          type: string
+        postal_code:
+          type: string
+        country:
+          type: string
+        notes:
+          type: string
+    UpdateVendorRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+        legal_name:
+          type: string
+        contact_name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        tax_identifier:
+          type: string
+        address_line1:
+          type: string
+        address_line2:
+          type: string
+        city:
+          type: string
+        state_region:
+          type: string
+        postal_code:
+          type: string
+        country:
+          type: string
+        notes:
+          type: string
+    VendorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - organization_id
+        - name
+        - status
+        - created_by_user_id
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        legal_name:
+          type: string
+          nullable: true
+        contact_name:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        tax_identifier:
+          type: string
+          nullable: true
+        address_line1:
+          type: string
+          nullable: true
+        address_line2:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state_region:
+          type: string
+          nullable: true
+        postal_code:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum:
+            - active
+            - archived
+        archived_at:
+          type: string
+          format: date-time
+        created_by_user_id:
+          type: string
+          format: uuid
+        updated_by_user_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ListVendorsResponse:
+      type: object
+      additionalProperties: false
+      required: [vendors]
+      properties:
+        vendors:
+          type: array
+          items:
+            $ref: '#/components/schemas/VendorResponse'

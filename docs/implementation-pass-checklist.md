@@ -60,7 +60,7 @@ Completed means the slice exists in code, is wired through the running API where
 ## Remaining For A Broader Phase 1 Pass
 
 - [x] Enforced tenant context on organization-scoped protected routes using `X-Tenant-ID`
-- [ ] Vendor module: CRUD, archive, and organization-scoped queries
+- [x] Vendor module: CRUD, archive, and organization-scoped queries
 - [ ] Procurement module: draft, items, submit, cancel
 - [ ] Approval module: approver inbox, approve, reject, comment
 - [ ] RFQ module: create, publish, close, evaluate, cancel

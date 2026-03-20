@@ -7,6 +7,7 @@ import (
 	applicationhealth "github.com/AbenezerWork/ProcureFlow/internal/application/health"
 	applicationidentity "github.com/AbenezerWork/ProcureFlow/internal/application/identity"
 	applicationorganization "github.com/AbenezerWork/ProcureFlow/internal/application/organization"
+	applicationvendor "github.com/AbenezerWork/ProcureFlow/internal/application/vendor"
 	authinfra "github.com/AbenezerWork/ProcureFlow/internal/infrastructure/auth"
 	"github.com/AbenezerWork/ProcureFlow/internal/infrastructure/config"
 	"github.com/AbenezerWork/ProcureFlow/internal/infrastructure/database"
@@ -34,16 +35,20 @@ func New(ctx context.Context, cfg config.Config, version string) (*App, error) {
 	tokenManager := authinfra.NewTokenManager(cfg.Auth)
 	identityRepository := dbrepositories.NewIdentityRepository(store)
 	organizationRepository := dbrepositories.NewOrganizationRepository(store)
+	vendorRepository := dbrepositories.NewVendorRepository(store)
 	healthService := applicationhealth.NewService(cfg.AppName, cfg.Environment, version)
 	identityService := applicationidentity.NewService(identityRepository, passwordHasher, tokenManager)
 	organizationService := applicationorganization.NewService(organizationRepository, organizationRepository, identityRepository)
+	vendorService := applicationvendor.NewService(vendorRepository)
 	healthHandler := handlers.NewHealthHandler(healthService, httpmiddleware.TenantFromContext)
 	authHandler := handlers.NewAuthHandler(identityService)
 	organizationHandler := handlers.NewOrganizationHandler(organizationService)
+	vendorHandler := handlers.NewVendorHandler(vendorService)
 	router := httprouter.New(
 		healthHandler,
 		authHandler,
 		organizationHandler,
+		vendorHandler,
 		httpmiddleware.RequireAuthentication(identityService),
 		cfg.TenantHeader,
 	)

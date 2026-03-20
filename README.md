@@ -55,6 +55,7 @@ Implemented API areas:
 - organizations: create, list mine, get details, update
 - organization memberships: list, create, update
 - organization ownership transfer: dedicated owner-to-member transfer flow
+- vendors: create, list, get, update, archive
 
 ## Running with Docker
 

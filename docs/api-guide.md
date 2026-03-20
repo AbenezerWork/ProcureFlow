@@ -1,6 +1,6 @@
 # API Guide
 
-This guide summarizes the currently implemented API surface and the authorization rules around organization management.
+This guide summarizes the currently implemented API surface and the authorization rules around organization and vendor management.
 
 ## Base URLs
 
@@ -40,6 +40,11 @@ Authorization: Bearer <access-token>
 - `POST /api/v1/organizations/{organizationID}/memberships`
 - `PATCH /api/v1/organizations/{organizationID}/memberships/{userID}`
 - `POST /api/v1/organizations/{organizationID}/ownership-transfer`
+- `GET /api/v1/organizations/{organizationID}/vendors/`
+- `POST /api/v1/organizations/{organizationID}/vendors/`
+- `GET /api/v1/organizations/{organizationID}/vendors/{vendorID}`
+- `PATCH /api/v1/organizations/{organizationID}/vendors/{vendorID}`
+- `POST /api/v1/organizations/{organizationID}/vendors/{vendorID}/archive`
 
 ## Organization roles
 
@@ -68,6 +73,8 @@ Authorization: Bearer <access-token>
 - Users cannot modify their own membership through the generic membership update route.
 - Ownership transfer requires the caller to be the current active `owner`.
 - Ownership transfer requires the target user to already have an active membership in the organization.
+- Any active organization member can list and get vendors.
+- Only `owner`, `admin`, and `procurement_officer` can create, update, or archive vendors.
 
 ## Manual test flow
 
@@ -139,4 +146,40 @@ curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/ownership-transf
   -H "X-Tenant-ID: $ORG_ID" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"target_user_id":"'$USER_ID'","current_owner_new_role":"admin"}'
+```
+
+Create a vendor:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/vendors/ \
+  -H 'Content-Type: application/json' \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name":"Blue Nile Supplies","email":"sales@bluenile.example","country":"ET"}'
+```
+
+List vendors:
+
+```bash
+curl http://localhost:8080/api/v1/organizations/$ORG_ID/vendors/ \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Update a vendor:
+
+```bash
+curl -X PATCH http://localhost:8080/api/v1/organizations/$ORG_ID/vendors/$VENDOR_ID \
+  -H 'Content-Type: application/json' \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"contact_name":"Abebe Buyer","phone":"+251900000000"}'
+```
+
+Archive a vendor:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/vendors/$VENDOR_ID/archive \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $TOKEN"
 ```

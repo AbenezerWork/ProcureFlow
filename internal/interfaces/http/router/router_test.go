@@ -65,6 +65,28 @@ func (stubOrganizationHandler) TransferOwnership(w http.ResponseWriter, _ *http.
 	w.WriteHeader(http.StatusOK)
 }
 
+type stubVendorHandler struct{}
+
+func (stubVendorHandler) Create(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (stubVendorHandler) List(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func (stubVendorHandler) Get(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func (stubVendorHandler) Update(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func (stubVendorHandler) Archive(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
 type fakeTokenVerifier struct {
 	verifyFn func(string) (domainidentity.Claims, error)
 }
@@ -78,7 +100,7 @@ func TestNewRoutesHealthCheck(t *testing.T) {
 
 	router := New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	}), stubAuthHandler{}, stubOrganizationHandler{}, func(next http.Handler) http.Handler {
+	}), stubAuthHandler{}, stubOrganizationHandler{}, stubVendorHandler{}, func(next http.Handler) http.Handler {
 		return next
 	}, "X-Tenant-ID")
 
@@ -97,7 +119,7 @@ func TestNewRoutesOpenAPISpec(t *testing.T) {
 
 	router := New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	}), stubAuthHandler{}, stubOrganizationHandler{}, func(next http.Handler) http.Handler {
+	}), stubAuthHandler{}, stubOrganizationHandler{}, stubVendorHandler{}, func(next http.Handler) http.Handler {
 		return next
 	}, "X-Tenant-ID")
 
@@ -120,7 +142,7 @@ func TestNewRoutesSwaggerUI(t *testing.T) {
 
 	router := New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	}), stubAuthHandler{}, stubOrganizationHandler{}, func(next http.Handler) http.Handler {
+	}), stubAuthHandler{}, stubOrganizationHandler{}, stubVendorHandler{}, func(next http.Handler) http.Handler {
 		return next
 	}, "X-Tenant-ID")
 
@@ -152,7 +174,7 @@ func TestNewAppliesTenantMiddleware(t *testing.T) {
 		}
 
 		w.WriteHeader(http.StatusNoContent)
-	}), stubAuthHandler{}, stubOrganizationHandler{}, func(next http.Handler) http.Handler {
+	}), stubAuthHandler{}, stubOrganizationHandler{}, stubVendorHandler{}, func(next http.Handler) http.Handler {
 		return next
 	}, "X-Tenant-ID")
 
@@ -180,7 +202,7 @@ func TestNewProtectsAuthenticatedRoutes(t *testing.T) {
 
 			w.WriteHeader(http.StatusOK)
 		},
-	}, stubOrganizationHandler{}, httpmiddleware.RequireAuthentication(fakeTokenVerifier{
+	}, stubOrganizationHandler{}, stubVendorHandler{}, httpmiddleware.RequireAuthentication(fakeTokenVerifier{
 		verifyFn: func(token string) (domainidentity.Claims, error) {
 			if token != "token" {
 				t.Fatalf("unexpected token: %s", token)
@@ -206,7 +228,7 @@ func TestNewRejectsMissingBearerToken(t *testing.T) {
 
 	router := New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	}), stubAuthHandler{}, stubOrganizationHandler{}, httpmiddleware.RequireAuthentication(fakeTokenVerifier{
+	}), stubAuthHandler{}, stubOrganizationHandler{}, stubVendorHandler{}, httpmiddleware.RequireAuthentication(fakeTokenVerifier{
 		verifyFn: func(string) (domainidentity.Claims, error) {
 			return domainidentity.Claims{UserID: uuid.New()}, nil
 		},
