@@ -36,7 +36,7 @@ func New(ctx context.Context, cfg config.Config, version string) (*App, error) {
 	organizationRepository := dbrepositories.NewOrganizationRepository(store)
 	healthService := applicationhealth.NewService(cfg.AppName, cfg.Environment, version)
 	identityService := applicationidentity.NewService(identityRepository, passwordHasher, tokenManager)
-	organizationService := applicationorganization.NewService(organizationRepository, organizationRepository)
+	organizationService := applicationorganization.NewService(organizationRepository, organizationRepository, identityRepository)
 	healthHandler := handlers.NewHealthHandler(healthService, httpmiddleware.TenantFromContext)
 	authHandler := handlers.NewAuthHandler(identityService)
 	organizationHandler := handlers.NewOrganizationHandler(organizationService)

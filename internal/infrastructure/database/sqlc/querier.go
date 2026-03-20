@@ -68,6 +68,7 @@ type Querier interface {
 	UpdateDraftRFQ(ctx context.Context, arg UpdateDraftRFQParams) (Rfq, error)
 	UpdateMembershipRole(ctx context.Context, arg UpdateMembershipRoleParams) (OrganizationMembership, error)
 	UpdateMembershipStatus(ctx context.Context, arg UpdateMembershipStatusParams) (OrganizationMembership, error)
+	UpdateOrganization(ctx context.Context, arg UpdateOrganizationParams) (Organization, error)
 	UpdateProcurementRequestItem(ctx context.Context, arg UpdateProcurementRequestItemParams) (ProcurementRequestItem, error)
 	UpdateQuotationItem(ctx context.Context, arg UpdateQuotationItemParams) (QuotationItem, error)
 	UpdateUserLastLogin(ctx context.Context, id uuid.UUID) error

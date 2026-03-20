@@ -280,3 +280,34 @@ func (q *Queries) UpdateMembershipStatus(ctx context.Context, arg UpdateMembersh
 	)
 	return i, err
 }
+
+const updateOrganization = `-- name: UpdateOrganization :one
+UPDATE organizations
+SET
+    name = $2,
+    slug = $3,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, name, slug, created_by_user_id, created_at, updated_at, archived_at
+`
+
+type UpdateOrganizationParams struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+	Slug string    `json:"slug"`
+}
+
+func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganizationParams) (Organization, error) {
+	row := q.db.QueryRow(ctx, updateOrganization, arg.ID, arg.Name, arg.Slug)
+	var i Organization
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}

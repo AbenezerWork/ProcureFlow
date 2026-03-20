@@ -9,6 +9,7 @@ import (
 	"github.com/AbenezerWork/ProcureFlow/internal/infrastructure/database"
 	"github.com/AbenezerWork/ProcureFlow/internal/infrastructure/database/sqlc"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -38,6 +39,41 @@ func (r *OrganizationRepository) CreateOrganization(ctx context.Context, params 
 	return mapOrganization(org), nil
 }
 
+func (r *OrganizationRepository) GetOrganization(ctx context.Context, organizationID uuid.UUID) (domainorganization.Organization, error) {
+	org, err := r.store.GetOrganizationByID(ctx, organizationID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domainorganization.Organization{}, applicationorganization.ErrOrganizationNotFound
+		}
+
+		return domainorganization.Organization{}, err
+	}
+
+	return mapOrganization(org), nil
+}
+
+func (r *OrganizationRepository) UpdateOrganization(ctx context.Context, params applicationorganization.UpdateOrganizationParams) (domainorganization.Organization, error) {
+	org, err := r.store.UpdateOrganization(ctx, sqlc.UpdateOrganizationParams{
+		ID:   params.ID,
+		Name: params.Name,
+		Slug: params.Slug,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domainorganization.Organization{}, applicationorganization.ErrOrganizationNotFound
+		}
+
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return domainorganization.Organization{}, applicationorganization.ErrOrganizationSlugTaken
+		}
+
+		return domainorganization.Organization{}, err
+	}
+
+	return mapOrganization(org), nil
+}
+
 func (r *OrganizationRepository) CreateMembership(ctx context.Context, params applicationorganization.CreateMembershipParams) (domainorganization.Membership, error) {
 	membership, err := r.store.CreateOrganizationMembership(ctx, sqlc.CreateOrganizationMembershipParams{
 		OrganizationID:  params.OrganizationID,
@@ -47,6 +83,75 @@ func (r *OrganizationRepository) CreateMembership(ctx context.Context, params ap
 		CreatedByUserID: params.CreatedByUserID,
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return domainorganization.Membership{}, applicationorganization.ErrMembershipAlreadyExists
+		}
+
+		return domainorganization.Membership{}, err
+	}
+
+	return mapMembership(membership), nil
+}
+
+func (r *OrganizationRepository) GetMembership(ctx context.Context, organizationID, userID uuid.UUID) (domainorganization.Membership, error) {
+	membership, err := r.store.GetOrganizationMembership(ctx, sqlc.GetOrganizationMembershipParams{
+		OrganizationID: organizationID,
+		UserID:         userID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domainorganization.Membership{}, applicationorganization.ErrMembershipNotFound
+		}
+
+		return domainorganization.Membership{}, err
+	}
+
+	return mapMembership(membership), nil
+}
+
+func (r *OrganizationRepository) ListMemberships(ctx context.Context, organizationID uuid.UUID) ([]domainorganization.Membership, error) {
+	rows, err := r.store.ListOrganizationMemberships(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
+
+	memberships := make([]domainorganization.Membership, 0, len(rows))
+	for _, membership := range rows {
+		memberships = append(memberships, mapMembership(membership))
+	}
+
+	return memberships, nil
+}
+
+func (r *OrganizationRepository) UpdateMembershipRole(ctx context.Context, organizationID, userID uuid.UUID, role domainorganization.MembershipRole) (domainorganization.Membership, error) {
+	membership, err := r.store.UpdateMembershipRole(ctx, sqlc.UpdateMembershipRoleParams{
+		OrganizationID: organizationID,
+		UserID:         userID,
+		Role:           sqlc.MembershipRole(role),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domainorganization.Membership{}, applicationorganization.ErrMembershipNotFound
+		}
+
+		return domainorganization.Membership{}, err
+	}
+
+	return mapMembership(membership), nil
+}
+
+func (r *OrganizationRepository) UpdateMembershipStatus(ctx context.Context, organizationID, userID uuid.UUID, status domainorganization.MembershipStatus) (domainorganization.Membership, error) {
+	membership, err := r.store.UpdateMembershipStatus(ctx, sqlc.UpdateMembershipStatusParams{
+		OrganizationID: organizationID,
+		UserID:         userID,
+		Status:         sqlc.MembershipStatus(status),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domainorganization.Membership{}, applicationorganization.ErrMembershipNotFound
+		}
+
 		return domainorganization.Membership{}, err
 	}
 

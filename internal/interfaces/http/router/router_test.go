@@ -41,6 +41,30 @@ func (stubOrganizationHandler) ListMine(w http.ResponseWriter, _ *http.Request) 
 	w.WriteHeader(http.StatusOK)
 }
 
+func (stubOrganizationHandler) Get(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func (stubOrganizationHandler) Update(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func (stubOrganizationHandler) ListMemberships(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func (stubOrganizationHandler) CreateMembership(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (stubOrganizationHandler) UpdateMembership(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func (stubOrganizationHandler) TransferOwnership(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
 type fakeTokenVerifier struct {
 	verifyFn func(string) (domainidentity.Claims, error)
 }
@@ -65,6 +89,52 @@ func TestNewRoutesHealthCheck(t *testing.T) {
 
 	if recorder.Code != http.StatusNoContent {
 		t.Fatalf("expected status %d, got %d", http.StatusNoContent, recorder.Code)
+	}
+}
+
+func TestNewRoutesOpenAPISpec(t *testing.T) {
+	t.Parallel()
+
+	router := New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), stubAuthHandler{}, stubOrganizationHandler{}, func(next http.Handler) http.Handler {
+		return next
+	}, "X-Tenant-ID")
+
+	request := httptest.NewRequest(http.MethodGet, "/openapi.yaml", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+	}
+
+	if got, want := recorder.Header().Get("Content-Type"), "application/yaml; charset=utf-8"; got != want {
+		t.Fatalf("expected content type %q, got %q", want, got)
+	}
+}
+
+func TestNewRoutesSwaggerUI(t *testing.T) {
+	t.Parallel()
+
+	router := New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), stubAuthHandler{}, stubOrganizationHandler{}, func(next http.Handler) http.Handler {
+		return next
+	}, "X-Tenant-ID")
+
+	request := httptest.NewRequest(http.MethodGet, "/swagger", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+	}
+
+	if got, want := recorder.Header().Get("Content-Type"), "text/html; charset=utf-8"; got != want {
+		t.Fatalf("expected content type %q, got %q", want, got)
 	}
 }
 

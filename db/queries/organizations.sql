@@ -13,6 +13,15 @@ SELECT *
 FROM organizations
 WHERE id = $1;
 
+-- name: UpdateOrganization :one
+UPDATE organizations
+SET
+    name = $2,
+    slug = $3,
+    updated_at = now()
+WHERE id = $1
+RETURNING *;
+
 -- name: GetOrganizationBySlug :one
 SELECT *
 FROM organizations

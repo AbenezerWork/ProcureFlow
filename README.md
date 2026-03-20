@@ -44,6 +44,18 @@ Health check:
 curl http://localhost:8080/healthz
 ```
 
+API documentation:
+
+- OpenAPI spec: `http://localhost:8080/openapi.yaml`
+- Swagger UI: `http://localhost:8080/swagger`
+
+Implemented API areas:
+
+- auth: register, login, current user
+- organizations: create, list mine, get details, update
+- organization memberships: list, create, update
+- organization ownership transfer: dedicated owner-to-member transfer flow
+
 ## Running with Docker
 
 The repository includes a multi-stage `Dockerfile` for the API and migration binaries, plus a `compose.yaml` stack that starts PostgreSQL, runs migrations, and then starts the API.
@@ -75,6 +87,23 @@ The application now also reads database settings from environment variables so t
 ## Phase 1 design baseline
 
 The initial product-to-backend mapping is documented in `docs/phase1-foundation.md`.
+The current API usage guide lives in `docs/api-guide.md`.
+
+Current organization roles:
+
+- `owner`
+- `admin`
+- `requester`
+- `approver`
+- `procurement_officer`
+- `viewer`
+
+Current membership statuses:
+
+- `invited`
+- `active`
+- `suspended`
+- `removed`
 
 Database schema changes should be added as raw SQL migrations under `db/migrations`.
 
@@ -95,6 +124,18 @@ go run ./cmd/migrate version
 ```
 
 The API does not auto-run migrations on startup. Apply them explicitly in local development and CI.
+
+## API docs
+
+The service now serves its OpenAPI document and Swagger UI directly:
+
+```bash
+curl http://localhost:8080/openapi.yaml
+```
+
+Then open `http://localhost:8080/swagger` in a browser.
+
+Swagger UI uses the served OpenAPI document at `/openapi.yaml`. The UI assets are loaded from the `swagger-ui-dist` CDN in the browser, so internet access is required when viewing `/swagger`.
 
 ## Docker workflow
 
