@@ -33,11 +33,25 @@ type VendorRoutes interface {
 	Archive(http.ResponseWriter, *http.Request)
 }
 
+type ProcurementRoutes interface {
+	CreateRequest(http.ResponseWriter, *http.Request)
+	ListRequests(http.ResponseWriter, *http.Request)
+	GetRequest(http.ResponseWriter, *http.Request)
+	UpdateRequest(http.ResponseWriter, *http.Request)
+	SubmitRequest(http.ResponseWriter, *http.Request)
+	CancelRequest(http.ResponseWriter, *http.Request)
+	ListItems(http.ResponseWriter, *http.Request)
+	CreateItem(http.ResponseWriter, *http.Request)
+	UpdateItem(http.ResponseWriter, *http.Request)
+	DeleteItem(http.ResponseWriter, *http.Request)
+}
+
 func New(
 	healthHandler http.Handler,
 	authHandler AuthRoutes,
 	organizationHandler OrganizationRoutes,
 	vendorHandler VendorRoutes,
+	procurementHandler ProcurementRoutes,
 	authMiddleware func(http.Handler) http.Handler,
 	tenantHeader string,
 ) http.Handler {
@@ -80,6 +94,24 @@ func New(
 							r.Get("/", vendorHandler.Get)
 							r.Patch("/", vendorHandler.Update)
 							r.Post("/archive", vendorHandler.Archive)
+						})
+					})
+					r.Route("/procurement-requests", func(r chi.Router) {
+						r.Get("/", procurementHandler.ListRequests)
+						r.Post("/", procurementHandler.CreateRequest)
+						r.Route("/{requestID}", func(r chi.Router) {
+							r.Get("/", procurementHandler.GetRequest)
+							r.Patch("/", procurementHandler.UpdateRequest)
+							r.Post("/submit", procurementHandler.SubmitRequest)
+							r.Post("/cancel", procurementHandler.CancelRequest)
+							r.Route("/items", func(r chi.Router) {
+								r.Get("/", procurementHandler.ListItems)
+								r.Post("/", procurementHandler.CreateItem)
+								r.Route("/{itemID}", func(r chi.Router) {
+									r.Patch("/", procurementHandler.UpdateItem)
+									r.Delete("/", procurementHandler.DeleteItem)
+								})
+							})
 						})
 					})
 				})

@@ -1,6 +1,6 @@
 # API Guide
 
-This guide summarizes the currently implemented API surface and the authorization rules around organization and vendor management.
+This guide summarizes the currently implemented API surface and the authorization rules around organization, vendor, and procurement request management.
 
 ## Base URLs
 
@@ -45,6 +45,16 @@ Authorization: Bearer <access-token>
 - `GET /api/v1/organizations/{organizationID}/vendors/{vendorID}`
 - `PATCH /api/v1/organizations/{organizationID}/vendors/{vendorID}`
 - `POST /api/v1/organizations/{organizationID}/vendors/{vendorID}/archive`
+- `GET /api/v1/organizations/{organizationID}/procurement-requests/`
+- `POST /api/v1/organizations/{organizationID}/procurement-requests/`
+- `GET /api/v1/organizations/{organizationID}/procurement-requests/{requestID}`
+- `PATCH /api/v1/organizations/{organizationID}/procurement-requests/{requestID}`
+- `POST /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/submit`
+- `POST /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/cancel`
+- `GET /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/items`
+- `POST /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/items`
+- `PATCH /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/items/{itemID}`
+- `DELETE /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/items/{itemID}`
 
 ## Organization roles
 
@@ -75,6 +85,9 @@ Authorization: Bearer <access-token>
 - Ownership transfer requires the target user to already have an active membership in the organization.
 - Any active organization member can list and get vendors.
 - Only `owner`, `admin`, and `procurement_officer` can create, update, or archive vendors.
+- Any active organization member can list and get procurement requests and request items.
+- `owner`, `admin`, `procurement_officer`, and `requester` can create procurement request drafts.
+- Draft updates, item writes, submit, and cancel are allowed for manager roles or the original requester on their own request.
 
 ## Manual test flow
 
@@ -180,6 +193,34 @@ Archive a vendor:
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/vendors/$VENDOR_ID/archive \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Create a procurement request draft:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/procurement-requests/ \
+  -H 'Content-Type: application/json' \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"title":"Office Chairs","justification":"Expand seating","currency_code":"ETB","estimated_total_amount":"10000.00"}'
+```
+
+Add an item to a draft:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/procurement-requests/$REQUEST_ID/items \
+  -H 'Content-Type: application/json' \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"item_name":"Ergonomic Chair","quantity":"10","unit":"pcs","estimated_unit_price":"1000.00","needed_by_date":"2026-04-15"}'
+```
+
+Submit a draft request:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/procurement-requests/$REQUEST_ID/submit \
   -H "X-Tenant-ID: $ORG_ID" \
   -H "Authorization: Bearer $TOKEN"
 ```

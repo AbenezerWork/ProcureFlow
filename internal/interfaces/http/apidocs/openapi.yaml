@@ -12,6 +12,7 @@ info:
     - membership list, create, and update
     - dedicated ownership transfer for owner changes
     - role enforcement for `owner` and `admin` management flows
+    - procurement request drafts, items, submit, and cancel
 
     Organization-scoped protected routes require the `X-Tenant-ID` header to
     match the target organization ID.
@@ -27,6 +28,8 @@ tags:
     description: Organization management and organization-scoped membership operations.
   - name: Vendors
     description: Organization-scoped vendor management.
+  - name: Procurement
+    description: Organization-scoped procurement request and draft-item management.
 paths:
   /healthz:
     get:
@@ -928,6 +931,436 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/procurement-requests:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+    get:
+      tags: [Procurement]
+      summary: List procurement requests for an organization
+      description: Lists procurement requests for the organization. Any active organization member may perform this action.
+      operationId: listProcurementRequests
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - draft
+              - submitted
+              - approved
+              - rejected
+              - cancelled
+      responses:
+        '200':
+          description: Procurement requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListProcurementRequestsResponse'
+        '400':
+          description: Invalid procurement filter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot access this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [Procurement]
+      summary: Create a procurement request draft
+      description: Creates a draft procurement request. Active `owner`, `admin`, `procurement_officer`, and `requester` memberships may perform this action.
+      operationId: createProcurementRequest
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProcurementRequest'
+      responses:
+        '201':
+          description: Procurement request draft created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcurementRequestResponse'
+        '400':
+          description: Invalid procurement request input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot create procurement requests in this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/procurement-requests/{requestID}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RequestID'
+    get:
+      tags: [Procurement]
+      summary: Get a procurement request
+      description: Returns a procurement request. Any active organization member may perform this action.
+      operationId: getProcurementRequest
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Procurement request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcurementRequestResponse'
+        '400':
+          description: Invalid organization or procurement request identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot access this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Procurement request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      tags: [Procurement]
+      summary: Update a draft procurement request
+      description: Updates a draft procurement request. Manager roles or the original requester on their own request may perform this action.
+      operationId: updateProcurementRequest
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProcurementRequest'
+      responses:
+        '200':
+          description: Updated procurement request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcurementRequestResponse'
+        '400':
+          description: Invalid procurement request update
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot update this procurement request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Procurement request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/submit:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RequestID'
+    post:
+      tags: [Procurement]
+      summary: Submit a draft procurement request
+      description: Submits a draft procurement request. Manager roles or the original requester on their own request may perform this action.
+      operationId: submitProcurementRequest
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Submitted procurement request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcurementRequestResponse'
+        '400':
+          description: Invalid procurement request transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot submit this procurement request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Procurement request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RequestID'
+    post:
+      tags: [Procurement]
+      summary: Cancel a procurement request
+      description: Cancels a draft or submitted procurement request. Manager roles or the original requester on their own request may perform this action.
+      operationId: cancelProcurementRequest
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Cancelled procurement request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcurementRequestResponse'
+        '400':
+          description: Invalid procurement request transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot cancel this procurement request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Procurement request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/items:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RequestID'
+    get:
+      tags: [Procurement]
+      summary: List items for a procurement request
+      description: Lists items for a procurement request. Any active organization member may perform this action.
+      operationId: listProcurementRequestItems
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Procurement request items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListProcurementItemsResponse'
+        '400':
+          description: Invalid organization or procurement request identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot access this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Procurement request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [Procurement]
+      summary: Add an item to a draft procurement request
+      description: Adds an item to a draft procurement request. Manager roles or the original requester on their own request may perform this action.
+      operationId: createProcurementRequestItem
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProcurementItem'
+      responses:
+        '201':
+          description: Procurement request item created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcurementItemResponse'
+        '400':
+          description: Invalid procurement request item input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot modify this procurement request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Procurement request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/items/{itemID}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/ItemID'
+    patch:
+      tags: [Procurement]
+      summary: Update an item on a draft procurement request
+      description: Updates an item on a draft procurement request. Manager roles or the original requester on their own request may perform this action.
+      operationId: updateProcurementRequestItem
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProcurementItem'
+      responses:
+        '200':
+          description: Updated procurement request item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcurementItemResponse'
+        '400':
+          description: Invalid procurement request item update
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot modify this procurement request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Procurement request or item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Procurement]
+      summary: Delete an item from a draft procurement request
+      description: Deletes an item from a draft procurement request. Manager roles or the original requester on their own request may perform this action.
+      operationId: deleteProcurementRequestItem
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Procurement request item deleted
+        '400':
+          description: Invalid organization, procurement request, or item identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot modify this procurement request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Procurement request or item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   parameters:
     TenantHeader:
@@ -960,6 +1393,20 @@ components:
         format: uuid
     VendorID:
       name: vendorID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RequestID:
+      name: requestID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ItemID:
+      name: itemID
       in: path
       required: true
       schema:
@@ -1472,3 +1919,213 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/VendorResponse'
+    CreateProcurementRequest:
+      type: object
+      additionalProperties: false
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        justification:
+          type: string
+        currency_code:
+          type: string
+        estimated_total_amount:
+          type: string
+    UpdateProcurementRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        justification:
+          type: string
+        currency_code:
+          type: string
+        estimated_total_amount:
+          type: string
+    ProcurementRequestResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - organization_id
+        - requester_user_id
+        - title
+        - status
+        - currency_code
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        requester_user_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        justification:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum:
+            - draft
+            - submitted
+            - approved
+            - rejected
+            - cancelled
+        currency_code:
+          type: string
+        estimated_total_amount:
+          type: string
+          nullable: true
+        submitted_at:
+          type: string
+          format: date-time
+        submitted_by_user_id:
+          type: string
+          format: uuid
+        approved_at:
+          type: string
+          format: date-time
+        approved_by_user_id:
+          type: string
+          format: uuid
+        rejected_at:
+          type: string
+          format: date-time
+        rejected_by_user_id:
+          type: string
+          format: uuid
+        decision_comment:
+          type: string
+          nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+        cancelled_by_user_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ListProcurementRequestsResponse:
+      type: object
+      additionalProperties: false
+      required: [procurement_requests]
+      properties:
+        procurement_requests:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProcurementRequestResponse'
+    CreateProcurementItem:
+      type: object
+      additionalProperties: false
+      required: [item_name, quantity, unit]
+      properties:
+        item_name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        quantity:
+          type: string
+        unit:
+          type: string
+          minLength: 1
+        estimated_unit_price:
+          type: string
+        needed_by_date:
+          type: string
+          format: date
+    UpdateProcurementItem:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        item_name:
+          type: string
+        description:
+          type: string
+        quantity:
+          type: string
+        unit:
+          type: string
+        estimated_unit_price:
+          type: string
+        needed_by_date:
+          type: string
+          format: date
+    ProcurementItemResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - organization_id
+        - procurement_request_id
+        - line_number
+        - item_name
+        - quantity
+        - unit
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        procurement_request_id:
+          type: string
+          format: uuid
+        line_number:
+          type: integer
+        item_name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        quantity:
+          type: string
+        unit:
+          type: string
+        estimated_unit_price:
+          type: string
+          nullable: true
+        needed_by_date:
+          type: string
+          format: date
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ListProcurementItemsResponse:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProcurementItemResponse'
