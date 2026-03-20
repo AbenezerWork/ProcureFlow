@@ -1,6 +1,6 @@
 # API Guide
 
-This guide summarizes the currently implemented API surface and the authorization rules around organization, vendor, procurement request, and approval management.
+This guide summarizes the currently implemented API surface and the authorization rules around organization, vendor, procurement request, approval, and RFQ management.
 
 ## Base URLs
 
@@ -58,6 +58,18 @@ Authorization: Bearer <access-token>
 - `POST /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/items`
 - `PATCH /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/items/{itemID}`
 - `DELETE /api/v1/organizations/{organizationID}/procurement-requests/{requestID}/items/{itemID}`
+- `GET /api/v1/organizations/{organizationID}/rfqs/`
+- `POST /api/v1/organizations/{organizationID}/rfqs/`
+- `GET /api/v1/organizations/{organizationID}/rfqs/{rfqID}`
+- `PATCH /api/v1/organizations/{organizationID}/rfqs/{rfqID}`
+- `POST /api/v1/organizations/{organizationID}/rfqs/{rfqID}/publish`
+- `POST /api/v1/organizations/{organizationID}/rfqs/{rfqID}/close`
+- `POST /api/v1/organizations/{organizationID}/rfqs/{rfqID}/evaluate`
+- `POST /api/v1/organizations/{organizationID}/rfqs/{rfqID}/cancel`
+- `GET /api/v1/organizations/{organizationID}/rfqs/{rfqID}/items`
+- `GET /api/v1/organizations/{organizationID}/rfqs/{rfqID}/vendors`
+- `POST /api/v1/organizations/{organizationID}/rfqs/{rfqID}/vendors`
+- `DELETE /api/v1/organizations/{organizationID}/rfqs/{rfqID}/vendors/{vendorID}`
 
 ## Organization roles
 
@@ -93,6 +105,12 @@ Authorization: Bearer <access-token>
 - Draft updates, item writes, submit, and cancel are allowed for manager roles or the original requester on their own request.
 - Only active `owner`, `admin`, and `approver` memberships can access the procurement approval inbox.
 - Only active `owner`, `admin`, and `approver` memberships can approve or reject submitted procurement requests.
+- Any active organization member can list and get RFQs, RFQ items, and RFQ vendors.
+- Only active `owner`, `admin`, and `procurement_officer` memberships can create and manage RFQs.
+- RFQs can only be created from approved procurement requests.
+- RFQ creation snapshots the current procurement request items into immutable RFQ items.
+- Vendor attachment and removal are only allowed while the RFQ is in `draft`.
+- Publishing an RFQ requires at least one attached vendor.
 
 ## Manual test flow
 
@@ -256,4 +274,44 @@ curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/procurement-requ
   -H "X-Tenant-ID: $ORG_ID" \
   -H "Authorization: Bearer $APPROVER_TOKEN" \
   -d '{"decision_comment":"Insufficient business justification"}'
+```
+
+Create an RFQ from an approved procurement request:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/rfqs/ \
+  -H 'Content-Type: application/json' \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"procurement_request_id":"'$REQUEST_ID'","reference_number":"RFQ-2026-001"}'
+```
+
+Attach a vendor to a draft RFQ:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/rfqs/$RFQ_ID/vendors \
+  -H 'Content-Type: application/json' \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"vendor_id":"'$VENDOR_ID'"}'
+```
+
+Publish an RFQ:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/rfqs/$RFQ_ID/publish \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Close and evaluate an RFQ:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/rfqs/$RFQ_ID/close \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $TOKEN"
+
+curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/rfqs/$RFQ_ID/evaluate \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $TOKEN"
 ```

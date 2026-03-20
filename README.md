@@ -57,6 +57,7 @@ Implemented API areas:
 - organization ownership transfer: dedicated owner-to-member transfer flow
 - vendors: create, list, get, update, archive
 - procurement requests: draft create/list/get/update, item CRUD, submit, approve, reject, cancel
+- rfqs: create from approved requests, snapshot items, attach/remove vendors, publish, close, evaluate, cancel
 
 ## Running with Docker
 

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: ProcureFlow API
-  version: 0.2.2
+  version: 0.2.3
   description: |
     OpenAPI document for the currently implemented ProcureFlow backend endpoints.
 
@@ -13,6 +13,7 @@ info:
     - dedicated ownership transfer for owner changes
     - role enforcement for `owner` and `admin` management flows
     - procurement request drafts, items, submit, approve, reject, and cancel
+    - RFQs created from approved procurement requests with item snapshotting and vendor attachment
 
     Organization-scoped protected routes require the `X-Tenant-ID` header to
     match the target organization ID.
@@ -32,6 +33,8 @@ tags:
     description: Organization-scoped procurement request and draft-item management.
   - name: Approvals
     description: Organization-scoped approval inbox and procurement approval decisions.
+  - name: RFQs
+    description: Organization-scoped RFQ creation, vendor attachment, and sourcing transitions.
 paths:
   /healthz:
     get:
@@ -1497,6 +1500,543 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/rfqs:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+    get:
+      tags: [RFQs]
+      summary: List RFQs for an organization
+      description: Lists RFQs for the organization. Any active organization member may perform this action.
+      operationId: listRFQs
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - draft
+              - published
+              - closed
+              - evaluated
+              - awarded
+              - cancelled
+      responses:
+        '200':
+          description: RFQs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListRFQsResponse'
+        '400':
+          description: Invalid RFQ filter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot access this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [RFQs]
+      summary: Create an RFQ from an approved procurement request
+      description: Creates a draft RFQ from an approved procurement request and snapshots the current procurement request items. Active `owner`, `admin`, and `procurement_officer` memberships may perform this action.
+      operationId: createRFQ
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRFQRequest'
+      responses:
+        '201':
+          description: Draft RFQ created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RFQResponse'
+        '400':
+          description: Invalid RFQ input or procurement request state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot create RFQs in this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Procurement request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: RFQ reference number already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/rfqs/{rfqID}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RFQID'
+    get:
+      tags: [RFQs]
+      summary: Get an RFQ
+      description: Returns an RFQ. Any active organization member may perform this action.
+      operationId: getRFQ
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: RFQ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RFQResponse'
+        '400':
+          description: Invalid organization or RFQ identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot access this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: RFQ not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      tags: [RFQs]
+      summary: Update a draft RFQ
+      description: Updates a draft RFQ. Active `owner`, `admin`, and `procurement_officer` memberships may perform this action.
+      operationId: updateRFQ
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRFQRequest'
+      responses:
+        '200':
+          description: Updated RFQ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RFQResponse'
+        '400':
+          description: Invalid RFQ update
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot update RFQs in this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: RFQ not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: RFQ reference number already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/rfqs/{rfqID}/publish:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RFQID'
+    post:
+      tags: [RFQs]
+      summary: Publish a draft RFQ
+      description: Publishes a draft RFQ. Active `owner`, `admin`, and `procurement_officer` memberships may perform this action. The RFQ must have at least one attached vendor.
+      operationId: publishRFQ
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Published RFQ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RFQResponse'
+        '400':
+          description: Invalid RFQ transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot publish RFQs in this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: RFQ not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/rfqs/{rfqID}/close:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RFQID'
+    post:
+      tags: [RFQs]
+      summary: Close a published RFQ
+      operationId: closeRFQ
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Closed RFQ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RFQResponse'
+        '400':
+          description: Invalid RFQ transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot close RFQs in this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: RFQ not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/rfqs/{rfqID}/evaluate:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RFQID'
+    post:
+      tags: [RFQs]
+      summary: Evaluate a closed RFQ
+      operationId: evaluateRFQ
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Evaluated RFQ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RFQResponse'
+        '400':
+          description: Invalid RFQ transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot evaluate RFQs in this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: RFQ not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/rfqs/{rfqID}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RFQID'
+    post:
+      tags: [RFQs]
+      summary: Cancel an RFQ
+      operationId: cancelRFQ
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Cancelled RFQ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RFQResponse'
+        '400':
+          description: Invalid RFQ transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot cancel RFQs in this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: RFQ not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/rfqs/{rfqID}/items:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RFQID'
+    get:
+      tags: [RFQs]
+      summary: List RFQ items
+      description: Lists the immutable RFQ item snapshot. Any active organization member may perform this action.
+      operationId: listRFQItems
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: RFQ items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListRFQItemsResponse'
+        '400':
+          description: Invalid organization or RFQ identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot access this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: RFQ not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/rfqs/{rfqID}/vendors:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RFQID'
+    get:
+      tags: [RFQs]
+      summary: List RFQ vendors
+      description: Lists vendors attached to the RFQ. Any active organization member may perform this action.
+      operationId: listRFQVendors
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: RFQ vendors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListRFQVendorsResponse'
+        '400':
+          description: Invalid organization or RFQ identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot access this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: RFQ not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [RFQs]
+      summary: Attach a vendor to a draft RFQ
+      description: Attaches an active vendor to a draft RFQ. Active `owner`, `admin`, and `procurement_officer` memberships may perform this action.
+      operationId: attachRFQVendor
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttachRFQVendorRequest'
+      responses:
+        '201':
+          description: RFQ vendor attached
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RFQVendorResponse'
+        '400':
+          description: Invalid RFQ vendor input or RFQ state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot manage RFQs in this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: RFQ or vendor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Vendor already attached to the RFQ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/rfqs/{rfqID}/vendors/{vendorID}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RFQID'
+      - $ref: '#/components/parameters/VendorID'
+    delete:
+      tags: [RFQs]
+      summary: Remove a vendor from a draft RFQ
+      description: Removes a vendor from a draft RFQ. Active `owner`, `admin`, and `procurement_officer` memberships may perform this action.
+      operationId: removeRFQVendor
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: RFQ vendor removed
+        '400':
+          description: Invalid organization, RFQ, or vendor identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot manage RFQs in this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: RFQ vendor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   parameters:
     TenantHeader:
@@ -1536,6 +2076,13 @@ components:
         format: uuid
     RequestID:
       name: requestID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RFQID:
+      name: rfqID
       in: path
       required: true
       schema:
@@ -2271,3 +2818,216 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProcurementItemResponse'
+    CreateRFQRequest:
+      type: object
+      additionalProperties: false
+      required: [procurement_request_id]
+      properties:
+        procurement_request_id:
+          type: string
+          format: uuid
+        reference_number:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+    UpdateRFQRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        reference_number:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+    RFQResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - organization_id
+        - procurement_request_id
+        - title
+        - status
+        - created_by_user_id
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        procurement_request_id:
+          type: string
+          format: uuid
+        reference_number:
+          type: string
+          nullable: true
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum:
+            - draft
+            - published
+            - closed
+            - evaluated
+            - awarded
+            - cancelled
+        created_by_user_id:
+          type: string
+          format: uuid
+        published_at:
+          type: string
+          format: date-time
+        closed_at:
+          type: string
+          format: date-time
+        evaluated_at:
+          type: string
+          format: date-time
+        cancelled_at:
+          type: string
+          format: date-time
+        cancelled_by_user_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ListRFQsResponse:
+      type: object
+      additionalProperties: false
+      required: [rfqs]
+      properties:
+        rfqs:
+          type: array
+          items:
+            $ref: '#/components/schemas/RFQResponse'
+    RFQItemResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - organization_id
+        - rfq_id
+        - line_number
+        - item_name
+        - quantity
+        - unit
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        rfq_id:
+          type: string
+          format: uuid
+        source_request_item_id:
+          type: string
+          format: uuid
+          nullable: true
+        line_number:
+          type: integer
+        item_name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        quantity:
+          type: string
+        unit:
+          type: string
+        target_date:
+          type: string
+          format: date
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ListRFQItemsResponse:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RFQItemResponse'
+    AttachRFQVendorRequest:
+      type: object
+      additionalProperties: false
+      required: [vendor_id]
+      properties:
+        vendor_id:
+          type: string
+          format: uuid
+    RFQVendorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - organization_id
+        - rfq_id
+        - vendor_id
+        - attached_by_user_id
+        - attached_at
+        - created_at
+        - vendor_name
+        - vendor_status
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        rfq_id:
+          type: string
+          format: uuid
+        vendor_id:
+          type: string
+          format: uuid
+        attached_by_user_id:
+          type: string
+          format: uuid
+        attached_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        vendor_name:
+          type: string
+        vendor_status:
+          type: string
+          enum:
+            - active
+            - archived
+    ListRFQVendorsResponse:
+      type: object
+      additionalProperties: false
+      required: [vendors]
+      properties:
+        vendors:
+          type: array
+          items:
+            $ref: '#/components/schemas/RFQVendorResponse'

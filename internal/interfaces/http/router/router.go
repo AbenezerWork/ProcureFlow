@@ -49,12 +49,28 @@ type ProcurementRoutes interface {
 	DeleteItem(http.ResponseWriter, *http.Request)
 }
 
+type RFQRoutes interface {
+	Create(http.ResponseWriter, *http.Request)
+	List(http.ResponseWriter, *http.Request)
+	Get(http.ResponseWriter, *http.Request)
+	Update(http.ResponseWriter, *http.Request)
+	Publish(http.ResponseWriter, *http.Request)
+	Close(http.ResponseWriter, *http.Request)
+	Evaluate(http.ResponseWriter, *http.Request)
+	Cancel(http.ResponseWriter, *http.Request)
+	ListItems(http.ResponseWriter, *http.Request)
+	ListVendors(http.ResponseWriter, *http.Request)
+	AttachVendor(http.ResponseWriter, *http.Request)
+	RemoveVendor(http.ResponseWriter, *http.Request)
+}
+
 func New(
 	healthHandler http.Handler,
 	authHandler AuthRoutes,
 	organizationHandler OrganizationRoutes,
 	vendorHandler VendorRoutes,
 	procurementHandler ProcurementRoutes,
+	rfqHandler RFQRoutes,
 	authMiddleware func(http.Handler) http.Handler,
 	tenantHeader string,
 ) http.Handler {
@@ -121,6 +137,26 @@ func New(
 									r.Patch("/", procurementHandler.UpdateItem)
 									r.Delete("/", procurementHandler.DeleteItem)
 								})
+							})
+						})
+					})
+					r.Route("/rfqs", func(r chi.Router) {
+						r.Get("/", rfqHandler.List)
+						r.Post("/", rfqHandler.Create)
+						r.Route("/{rfqID}", func(r chi.Router) {
+							r.Get("/", rfqHandler.Get)
+							r.Patch("/", rfqHandler.Update)
+							r.Post("/publish", rfqHandler.Publish)
+							r.Post("/close", rfqHandler.Close)
+							r.Post("/evaluate", rfqHandler.Evaluate)
+							r.Post("/cancel", rfqHandler.Cancel)
+							r.Route("/items", func(r chi.Router) {
+								r.Get("/", rfqHandler.ListItems)
+							})
+							r.Route("/vendors", func(r chi.Router) {
+								r.Get("/", rfqHandler.ListVendors)
+								r.Post("/", rfqHandler.AttachVendor)
+								r.Delete("/{vendorID}", rfqHandler.RemoveVendor)
 							})
 						})
 					})

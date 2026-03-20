@@ -8,6 +8,7 @@ import (
 	applicationidentity "github.com/AbenezerWork/ProcureFlow/internal/application/identity"
 	applicationorganization "github.com/AbenezerWork/ProcureFlow/internal/application/organization"
 	applicationprocurement "github.com/AbenezerWork/ProcureFlow/internal/application/procurement"
+	applicationrfq "github.com/AbenezerWork/ProcureFlow/internal/application/rfq"
 	applicationvendor "github.com/AbenezerWork/ProcureFlow/internal/application/vendor"
 	authinfra "github.com/AbenezerWork/ProcureFlow/internal/infrastructure/auth"
 	"github.com/AbenezerWork/ProcureFlow/internal/infrastructure/config"
@@ -37,16 +38,19 @@ func New(ctx context.Context, cfg config.Config, version string) (*App, error) {
 	identityRepository := dbrepositories.NewIdentityRepository(store)
 	organizationRepository := dbrepositories.NewOrganizationRepository(store)
 	procurementRepository := dbrepositories.NewProcurementRepository(store)
+	rfqRepository := dbrepositories.NewRFQRepository(store)
 	vendorRepository := dbrepositories.NewVendorRepository(store)
 	healthService := applicationhealth.NewService(cfg.AppName, cfg.Environment, version)
 	identityService := applicationidentity.NewService(identityRepository, passwordHasher, tokenManager)
 	organizationService := applicationorganization.NewService(organizationRepository, organizationRepository, identityRepository)
 	procurementService := applicationprocurement.NewService(procurementRepository)
+	rfqService := applicationrfq.NewService(rfqRepository, rfqRepository)
 	vendorService := applicationvendor.NewService(vendorRepository)
 	healthHandler := handlers.NewHealthHandler(healthService, httpmiddleware.TenantFromContext)
 	authHandler := handlers.NewAuthHandler(identityService)
 	organizationHandler := handlers.NewOrganizationHandler(organizationService)
 	procurementHandler := handlers.NewProcurementHandler(procurementService)
+	rfqHandler := handlers.NewRFQHandler(rfqService)
 	vendorHandler := handlers.NewVendorHandler(vendorService)
 	router := httprouter.New(
 		healthHandler,
@@ -54,6 +58,7 @@ func New(ctx context.Context, cfg config.Config, version string) (*App, error) {
 		organizationHandler,
 		vendorHandler,
 		procurementHandler,
+		rfqHandler,
 		httpmiddleware.RequireAuthentication(identityService),
 		cfg.TenantHeader,
 	)
