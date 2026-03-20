@@ -88,6 +88,7 @@ The application now also reads database settings from environment variables so t
 
 The initial product-to-backend mapping is documented in `docs/phase1-foundation.md`.
 The current API usage guide lives in `docs/api-guide.md`.
+The current implementation-pass deliverables checklist lives in `docs/implementation-pass-checklist.md`.
 
 Current organization roles:
 
