@@ -13,8 +13,8 @@ info:
     - dedicated ownership transfer for owner changes
     - role enforcement for `owner` and `admin` management flows
 
-    The app also accepts an optional tenant header, `X-Tenant-ID`, but tenant
-    scoping is not yet enforced on the protected organization endpoints.
+    Organization-scoped protected routes require the `X-Tenant-ID` header to
+    match the target organization ID.
 servers:
   - url: http://localhost:8080
     description: Local development
@@ -255,6 +255,7 @@ paths:
   /api/v1/organizations/{organizationID}:
     parameters:
       - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
     get:
       tags: [Organizations]
       summary: Get an organization the current user belongs to
@@ -371,6 +372,7 @@ paths:
   /api/v1/organizations/{organizationID}/ownership-transfer:
     parameters:
       - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
     post:
       tags: [Organizations]
       summary: Transfer organization ownership to another active member
@@ -477,6 +479,7 @@ paths:
   /api/v1/organizations/{organizationID}/memberships:
     parameters:
       - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
     get:
       tags: [Organizations]
       summary: List memberships for an organization
@@ -627,6 +630,7 @@ paths:
   /api/v1/organizations/{organizationID}/memberships/{userID}:
     parameters:
       - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
       - $ref: '#/components/parameters/UserID'
     patch:
       tags: [Organizations]
@@ -710,7 +714,14 @@ components:
       name: X-Tenant-ID
       in: header
       required: false
-      description: Optional tenant context header currently surfaced by the health endpoint.
+      description: Optional tenant context header surfaced by the health endpoint.
+      schema:
+        type: string
+    OrganizationTenantHeader:
+      name: X-Tenant-ID
+      in: header
+      required: true
+      description: Required tenant context header for organization-scoped routes. Must match the target organization ID.
       schema:
         type: string
     OrganizationID:

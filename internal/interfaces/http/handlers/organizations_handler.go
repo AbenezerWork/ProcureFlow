@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	applicationorganization "github.com/AbenezerWork/ProcureFlow/internal/application/organization"
@@ -371,6 +372,23 @@ func authenticatedOrganizationRequest(w http.ResponseWriter, r *http.Request) (u
 	organizationID, err := uuid.Parse(chi.URLParam(r, "organizationID"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid organization_id")
+		return uuid.Nil, uuid.Nil, false
+	}
+
+	tenantID, ok := httpmiddleware.TenantFromContext(r.Context())
+	if !ok || strings.TrimSpace(tenantID.String()) == "" {
+		writeError(w, http.StatusBadRequest, "missing tenant context")
+		return uuid.Nil, uuid.Nil, false
+	}
+
+	tenantOrganizationID, err := uuid.Parse(tenantID.String())
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid tenant_id")
+		return uuid.Nil, uuid.Nil, false
+	}
+
+	if tenantOrganizationID != organizationID {
+		writeError(w, http.StatusForbidden, "tenant does not match organization")
 		return uuid.Nil, uuid.Nil, false
 	}
 

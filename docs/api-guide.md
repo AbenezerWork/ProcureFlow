@@ -60,6 +60,7 @@ Authorization: Bearer <access-token>
 ## Current authorization rules
 
 - Any organization access requires an active membership in that organization.
+- Organization-scoped routes require `X-Tenant-ID` to match the target organization ID.
 - Only `owner` and `admin` can update organization details.
 - Only `owner` and `admin` can list or manage memberships.
 - Only an `owner` can create another `owner` membership.
@@ -106,6 +107,7 @@ Load one organization:
 
 ```bash
 curl http://localhost:8080/api/v1/organizations/$ORG_ID \
+  -H "X-Tenant-ID: $ORG_ID" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -114,6 +116,7 @@ Invite an existing user by email:
 ```bash
 curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/memberships \
   -H 'Content-Type: application/json' \
+  -H "X-Tenant-ID: $ORG_ID" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"email":"approver@example.com","role":"approver","status":"invited"}'
 ```
@@ -123,6 +126,7 @@ Activate or change a member role:
 ```bash
 curl -X PATCH http://localhost:8080/api/v1/organizations/$ORG_ID/memberships/$USER_ID \
   -H 'Content-Type: application/json' \
+  -H "X-Tenant-ID: $ORG_ID" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"role":"approver","status":"active"}'
 ```
@@ -132,6 +136,7 @@ Transfer ownership to another active member:
 ```bash
 curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/ownership-transfer \
   -H 'Content-Type: application/json' \
+  -H "X-Tenant-ID: $ORG_ID" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"target_user_id":"'$USER_ID'","current_owner_new_role":"admin"}'
 ```
