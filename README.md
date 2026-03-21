@@ -67,18 +67,22 @@ The repository includes a multi-stage `Dockerfile` for the API and migration bin
 docker compose up --build
 ```
 
+Set the required runtime secrets first, for example:
+
+```bash
+export AUTH_JWT_SECRET=replace-with-a-long-random-secret
+export DB_USER=procureflow
+export DB_PASSWORD=replace-with-a-strong-password
+export DB_NAME=procureflow
+docker compose up --build
+```
+
 Services:
 
 - API: `http://localhost:8080`
 - PostgreSQL: `localhost:5432`
 
-Default PostgreSQL credentials:
-
-- Database: `procureflow`
-- User: `procureflow`
-- Password: `procureflow`
-
-The application now also reads database settings from environment variables so the repository is ready for repository and migration wiring:
+The application reads database settings from environment variables:
 
 - `DB_HOST`
 - `DB_PORT`
@@ -86,6 +90,12 @@ The application now also reads database settings from environment variables so t
 - `DB_PASSWORD`
 - `DB_NAME`
 - `DB_SSLMODE`
+
+JWT signing configuration:
+
+- `AUTH_JWT_SECRET`
+
+In `APP_ENV=production`, the application refuses to start if `AUTH_JWT_SECRET`, `DB_USER`, `DB_PASSWORD`, or `DB_NAME` are still using the built-in development defaults.
 
 ## Phase 1 design baseline
 

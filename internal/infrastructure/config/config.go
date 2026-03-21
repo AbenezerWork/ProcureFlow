@@ -24,6 +24,8 @@ const (
 	defaultDBSSLMode       = "disable"
 )
 
+const productionEnvironment = "production"
+
 type Config struct {
 	AppName         string
 	Environment     string
@@ -62,6 +64,8 @@ func (c DatabaseConfig) ConnectionString() string {
 }
 
 func Load() (Config, error) {
+	environment := valueOrDefault("APP_ENV", defaultEnvironment)
+
 	shutdownTimeout := defaultShutdownTimeout
 	if raw := os.Getenv("APP_SHUTDOWN_TIMEOUT"); raw != "" {
 		parsed, err := time.ParseDuration(raw)
@@ -85,9 +89,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	return Config{
+	cfg := Config{
 		AppName:         valueOrDefault("APP_NAME", defaultAppName),
-		Environment:     valueOrDefault("APP_ENV", defaultEnvironment),
+		Environment:     environment,
 		HTTPAddress:     valueOrDefault("APP_HTTP_ADDRESS", defaultHTTPAddress),
 		ShutdownTimeout: shutdownTimeout,
 		TenantHeader:    valueOrDefault("APP_TENANT_HEADER", defaultTenantHeader),
@@ -104,7 +108,35 @@ func Load() (Config, error) {
 			Name:     valueOrDefault("DB_NAME", defaultDBName),
 			SSLMode:  valueOrDefault("DB_SSLMODE", defaultDBSSLMode),
 		},
-	}, nil
+	}
+
+	if environment == productionEnvironment {
+		if err := validateProductionConfig(cfg); err != nil {
+			return Config{}, err
+		}
+	}
+
+	return cfg, nil
+}
+
+func validateProductionConfig(cfg Config) error {
+	if cfg.Auth.JWTSecret == defaultJWTSecret {
+		return fmt.Errorf("AUTH_JWT_SECRET must be set to a non-default value in %s", productionEnvironment)
+	}
+
+	if cfg.Database.User == defaultDBUser {
+		return fmt.Errorf("DB_USER must be set to a non-default value in %s", productionEnvironment)
+	}
+
+	if cfg.Database.Password == defaultDBPassword {
+		return fmt.Errorf("DB_PASSWORD must be set to a non-default value in %s", productionEnvironment)
+	}
+
+	if cfg.Database.Name == defaultDBName {
+		return fmt.Errorf("DB_NAME must be set to a non-default value in %s", productionEnvironment)
+	}
+
+	return nil
 }
 
 func valueOrDefault(key, fallback string) string {

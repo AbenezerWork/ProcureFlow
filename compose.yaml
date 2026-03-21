@@ -11,15 +11,16 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      APP_ENV: docker
-      APP_HTTP_ADDRESS: :8080
-      APP_TENANT_HEADER: X-Tenant-ID
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: procureflow
-      DB_PASSWORD: procureflow
-      DB_NAME: procureflow
-      DB_SSLMODE: disable
+      APP_ENV: ${APP_ENV:-docker}
+      APP_HTTP_ADDRESS: ${APP_HTTP_ADDRESS:-:8080}
+      APP_TENANT_HEADER: ${APP_TENANT_HEADER:-X-Tenant-ID}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET is required}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:?DB_USER is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
     ports:
       - "8080:8080"
     restart: unless-stopped
@@ -31,13 +32,13 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      APP_ENV: docker
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: procureflow
-      DB_PASSWORD: procureflow
-      DB_NAME: procureflow
-      DB_SSLMODE: disable
+      APP_ENV: ${APP_ENV:-docker}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:?DB_USER is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
     entrypoint: ["/app/procureflow-migrate"]
     command: ["up"]
     restart: "no"
@@ -46,15 +47,15 @@ services:
     image: postgres:18-alpine
     container_name: procureflow-postgres
     environment:
-      POSTGRES_DB: procureflow
-      POSTGRES_USER: procureflow
-      POSTGRES_PASSWORD: procureflow
+      POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
+      POSTGRES_USER: ${DB_USER:?DB_USER is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U procureflow -d procureflow"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:?DB_USER is required} -d ${DB_NAME:?DB_NAME is required}"]
       interval: 10s
       timeout: 5s
       retries: 5
