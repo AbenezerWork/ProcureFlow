@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 
+	applicationactivitylog "github.com/AbenezerWork/ProcureFlow/internal/application/activitylog"
 	applicationorganization "github.com/AbenezerWork/ProcureFlow/internal/application/organization"
+	domainactivitylog "github.com/AbenezerWork/ProcureFlow/internal/domain/activitylog"
 	domainorganization "github.com/AbenezerWork/ProcureFlow/internal/domain/organization"
 	"github.com/AbenezerWork/ProcureFlow/internal/infrastructure/database"
 	"github.com/AbenezerWork/ProcureFlow/internal/infrastructure/database/sqlc"
@@ -15,10 +17,11 @@ import (
 
 type OrganizationRepository struct {
 	store *database.Store
+	hooks []applicationactivitylog.Hook
 }
 
-func NewOrganizationRepository(store *database.Store) *OrganizationRepository {
-	return &OrganizationRepository{store: store}
+func NewOrganizationRepository(store *database.Store, hooks ...applicationactivitylog.Hook) *OrganizationRepository {
+	return &OrganizationRepository{store: store, hooks: hooks}
 }
 
 func (r *OrganizationRepository) CreateOrganization(ctx context.Context, params applicationorganization.CreateOrganizationParams) (domainorganization.Organization, error) {
@@ -184,9 +187,13 @@ func (r *OrganizationRepository) ListUserOrganizations(ctx context.Context, user
 	return organizations, nil
 }
 
+func (r *OrganizationRepository) CreateActivityLog(ctx context.Context, params applicationorganization.CreateActivityLogParams) (domainactivitylog.Entry, error) {
+	return createActivityLog(ctx, r.store, applicationactivitylog.CreateParams(params), r.hooks...)
+}
+
 func (r *OrganizationRepository) WithinTransaction(ctx context.Context, fn func(repo applicationorganization.Repository) error) error {
 	return r.store.InTx(ctx, func(txStore *database.Store) error {
-		return fn(NewOrganizationRepository(txStore))
+		return fn(NewOrganizationRepository(txStore, r.hooks...))
 	})
 }
 

@@ -1,6 +1,8 @@
 # API Guide
 
-This guide summarizes the currently implemented API surface and the authorization rules around organization, vendor, procurement request, approval, and RFQ management.
+This guide summarizes the currently implemented API surface and the authorization rules around organization, vendor, procurement request, approval, RFQ, quotation, award, and activity-log timeline management.
+
+The canonical activity-log event vocabulary is defined in `docs/activity-log-taxonomy.md`.
 
 ## Base URLs
 
@@ -40,6 +42,7 @@ Authorization: Bearer <access-token>
 - `POST /api/v1/organizations/{organizationID}/memberships`
 - `PATCH /api/v1/organizations/{organizationID}/memberships/{userID}`
 - `POST /api/v1/organizations/{organizationID}/ownership-transfer`
+- `GET /api/v1/organizations/{organizationID}/activity-logs`
 - `GET /api/v1/organizations/{organizationID}/vendors/`
 - `POST /api/v1/organizations/{organizationID}/vendors/`
 - `GET /api/v1/organizations/{organizationID}/vendors/{vendorID}`
@@ -70,6 +73,16 @@ Authorization: Bearer <access-token>
 - `GET /api/v1/organizations/{organizationID}/rfqs/{rfqID}/vendors`
 - `POST /api/v1/organizations/{organizationID}/rfqs/{rfqID}/vendors`
 - `DELETE /api/v1/organizations/{organizationID}/rfqs/{rfqID}/vendors/{vendorID}`
+- `GET /api/v1/organizations/{organizationID}/rfqs/{rfqID}/quotations/`
+- `POST /api/v1/organizations/{organizationID}/rfqs/{rfqID}/quotations/`
+- `GET /api/v1/organizations/{organizationID}/rfqs/{rfqID}/quotations/{quotationID}`
+- `PATCH /api/v1/organizations/{organizationID}/rfqs/{rfqID}/quotations/{quotationID}`
+- `POST /api/v1/organizations/{organizationID}/rfqs/{rfqID}/quotations/{quotationID}/submit`
+- `POST /api/v1/organizations/{organizationID}/rfqs/{rfqID}/quotations/{quotationID}/reject`
+- `GET /api/v1/organizations/{organizationID}/rfqs/{rfqID}/quotations/{quotationID}/items`
+- `PATCH /api/v1/organizations/{organizationID}/rfqs/{rfqID}/quotations/{quotationID}/items/{itemID}`
+- `GET /api/v1/organizations/{organizationID}/rfqs/{rfqID}/award/`
+- `POST /api/v1/organizations/{organizationID}/rfqs/{rfqID}/award/`
 
 ## Organization roles
 
@@ -91,6 +104,7 @@ Authorization: Bearer <access-token>
 
 - Any organization access requires an active membership in that organization.
 - Organization-scoped routes require `X-Tenant-ID` to match the target organization ID.
+- Any active organization member can query activity logs for a specific organization-scoped entity timeline.
 - Only `owner` and `admin` can update organization details.
 - Only `owner` and `admin` can list or manage memberships.
 - Only an `owner` can create another `owner` membership.
@@ -111,6 +125,18 @@ Authorization: Bearer <access-token>
 - RFQ creation snapshots the current procurement request items into immutable RFQ items.
 - Vendor attachment and removal are only allowed while the RFQ is in `draft`.
 - Publishing an RFQ requires at least one attached vendor.
+- Any active organization member can list and get quotations and quotation items.
+- Only active `owner`, `admin`, and `procurement_officer` memberships can create and manage quotations.
+- Quotations can only be created while the RFQ is in `published`.
+- Quotation creation snapshots the current RFQ items into quotation items with initial zero pricing.
+- Quotation item pricing updates are only allowed while the quotation is in `draft` and the RFQ remains `published`.
+- Quotation submission is only allowed for `draft` quotations while the RFQ remains `published`.
+- Quotation rejection is allowed for `draft` or `submitted` quotations while the RFQ is `published`, `closed`, or `evaluated`.
+- Any active organization member can look up the RFQ award.
+- Only active `owner`, `admin`, and `procurement_officer` memberships can create an award.
+- Awards can only be created for `submitted` quotations that belong to the target RFQ.
+- Award creation requires the RFQ to be in `evaluated` and marks the RFQ as `awarded`.
+- Activity logs are currently emitted for procurement request submit/approve/reject, RFQ creation, quotation submit/reject, and RFQ award creation.
 
 ## Manual test flow
 
@@ -304,6 +330,34 @@ curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/rfqs/$RFQ_ID/pub
   -H "Authorization: Bearer $TOKEN"
 ```
 
+Create a quotation for an attached RFQ vendor:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/rfqs/$RFQ_ID/quotations/ \
+  -H 'Content-Type: application/json' \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"rfq_vendor_id":"'$RFQ_VENDOR_ID'","currency_code":"ETB","lead_time_days":7,"payment_terms":"Net 30"}'
+```
+
+Update quotation item pricing:
+
+```bash
+curl -X PATCH http://localhost:8080/api/v1/organizations/$ORG_ID/rfqs/$RFQ_ID/quotations/$QUOTATION_ID/items/$ITEM_ID \
+  -H 'Content-Type: application/json' \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"unit_price":"950.00","delivery_days":5,"notes":"In stock"}'
+```
+
+Submit a quotation:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/rfqs/$RFQ_ID/quotations/$QUOTATION_ID/submit \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
 Close and evaluate an RFQ:
 
 ```bash
@@ -312,6 +366,32 @@ curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/rfqs/$RFQ_ID/clo
   -H "Authorization: Bearer $TOKEN"
 
 curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/rfqs/$RFQ_ID/evaluate \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Create an award from an evaluated RFQ:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/rfqs/$RFQ_ID/award/ \
+  -H 'Content-Type: application/json' \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"quotation_id":"'$QUOTATION_ID'","reason":"Best commercial value"}'
+```
+
+Load the award for an RFQ:
+
+```bash
+curl http://localhost:8080/api/v1/organizations/$ORG_ID/rfqs/$RFQ_ID/award/ \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Load the activity timeline for a procurement request:
+
+```bash
+curl "http://localhost:8080/api/v1/organizations/$ORG_ID/activity-logs?entity_type=procurement_request&entity_id=$REQUEST_ID" \
   -H "X-Tenant-ID: $ORG_ID" \
   -H "Authorization: Bearer $TOKEN"
 ```

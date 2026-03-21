@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	applicationactivitylog "github.com/AbenezerWork/ProcureFlow/internal/application/activitylog"
+	domainactivitylog "github.com/AbenezerWork/ProcureFlow/internal/domain/activitylog"
 	domainorganization "github.com/AbenezerWork/ProcureFlow/internal/domain/organization"
 	domainprocurement "github.com/AbenezerWork/ProcureFlow/internal/domain/procurement"
 	"github.com/google/uuid"
@@ -81,6 +83,11 @@ type Repository interface {
 	UpdateItem(ctx context.Context, params UpdateItemParams) (domainprocurement.Item, error)
 	DeleteItem(ctx context.Context, organizationID, requestID, itemID uuid.UUID) error
 	GetMembership(ctx context.Context, organizationID, userID uuid.UUID) (domainorganization.Membership, error)
+	CreateActivityLog(ctx context.Context, params applicationactivitylog.CreateParams) (domainactivitylog.Entry, error)
+}
+
+type TransactionManager interface {
+	WithinTransaction(ctx context.Context, fn func(repo Repository) error) error
 }
 
 type CreateRequestInput struct {
@@ -168,10 +175,11 @@ type DeleteItemInput struct {
 
 type Service struct {
 	repo Repository
+	tx   TransactionManager
 }
 
-func NewService(repo Repository) Service {
-	return Service{repo: repo}
+func NewService(repo Repository, tx TransactionManager) Service {
+	return Service{repo: repo, tx: tx}
 }
 
 func (s Service) CreateRequest(ctx context.Context, input CreateRequestInput) (domainprocurement.Request, error) {
@@ -193,16 +201,40 @@ func (s Service) CreateRequest(ctx context.Context, input CreateRequestInput) (d
 		return domainprocurement.Request{}, err
 	}
 
-	created, err := s.repo.CreateRequest(ctx, CreateRequestParams{
-		OrganizationID:       input.OrganizationID,
-		RequesterUserID:      input.CurrentUser,
-		Title:                title,
-		Description:          normalizeOptional(input.Description),
-		Justification:        normalizeOptional(input.Justification),
-		CurrencyCode:         currency,
-		EstimatedTotalAmount: amount,
-	})
-	if err != nil {
+	var created domainprocurement.Request
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		request, err := repo.CreateRequest(ctx, CreateRequestParams{
+			OrganizationID:       input.OrganizationID,
+			RequesterUserID:      input.CurrentUser,
+			Title:                title,
+			Description:          normalizeOptional(input.Description),
+			Justification:        normalizeOptional(input.Justification),
+			CurrencyCode:         currency,
+			EstimatedTotalAmount: amount,
+		})
+		if err != nil {
+			return err
+		}
+
+		summary := "Created procurement request"
+		if _, err := repo.CreateActivityLog(ctx, applicationactivitylog.CreateParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeProcurementRequest),
+			EntityID:       request.ID,
+			Action:         domainactivitylog.ActionProcurementRequestCreated,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"requester_user_id": input.CurrentUser.String(),
+				"request_status":    string(request.Status),
+			},
+		}); err != nil {
+			return err
+		}
+
+		created = request
+		return nil
+	}); err != nil {
 		return domainprocurement.Request{}, fmt.Errorf("create procurement request: %w", err)
 	}
 
@@ -308,16 +340,39 @@ func (s Service) UpdateRequest(ctx context.Context, input UpdateRequestInput) (d
 		return domainprocurement.Request{}, err
 	}
 
-	updated, err := s.repo.UpdateDraftRequest(ctx, UpdateRequestParams{
-		OrganizationID:       input.OrganizationID,
-		RequestID:            input.RequestID,
-		Title:                title,
-		Description:          mergeOptional(request.Description, input.Description),
-		Justification:        mergeOptional(request.Justification, input.Justification),
-		CurrencyCode:         currency,
-		EstimatedTotalAmount: amount,
-	})
-	if err != nil {
+	var updated domainprocurement.Request
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		next, err := repo.UpdateDraftRequest(ctx, UpdateRequestParams{
+			OrganizationID:       input.OrganizationID,
+			RequestID:            input.RequestID,
+			Title:                title,
+			Description:          mergeOptional(request.Description, input.Description),
+			Justification:        mergeOptional(request.Justification, input.Justification),
+			CurrencyCode:         currency,
+			EstimatedTotalAmount: amount,
+		})
+		if err != nil {
+			return err
+		}
+
+		summary := "Updated procurement request"
+		if _, err := repo.CreateActivityLog(ctx, applicationactivitylog.CreateParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeProcurementRequest),
+			EntityID:       next.ID,
+			Action:         domainactivitylog.ActionProcurementRequestUpdated,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"request_status": string(next.Status),
+			},
+		}); err != nil {
+			return err
+		}
+
+		updated = next
+		return nil
+	}); err != nil {
 		if errors.Is(err, ErrProcurementRequestNotFound) {
 			return domainprocurement.Request{}, err
 		}
@@ -344,8 +399,31 @@ func (s Service) SubmitRequest(ctx context.Context, input SubmitRequestInput) (d
 		return domainprocurement.Request{}, ErrInvalidProcurementRequest
 	}
 
-	submitted, err := s.repo.SubmitRequest(ctx, input.OrganizationID, input.RequestID, input.CurrentUser)
-	if err != nil {
+	var submitted domainprocurement.Request
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		updated, err := repo.SubmitRequest(ctx, input.OrganizationID, input.RequestID, input.CurrentUser)
+		if err != nil {
+			return err
+		}
+
+		summary := "Submitted procurement request"
+		if _, err := repo.CreateActivityLog(ctx, applicationactivitylog.CreateParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeProcurementRequest),
+			EntityID:       input.RequestID,
+			Action:         domainactivitylog.ActionProcurementRequestSubmitted,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"request_status": string(updated.Status),
+			},
+		}); err != nil {
+			return err
+		}
+
+		submitted = updated
+		return nil
+	}); err != nil {
 		if errors.Is(err, ErrProcurementRequestNotFound) {
 			return domainprocurement.Request{}, err
 		}
@@ -372,8 +450,36 @@ func (s Service) ApproveRequest(ctx context.Context, input DecisionInput) (domai
 		return domainprocurement.Request{}, ErrInvalidProcurementRequest
 	}
 
-	approved, err := s.repo.ApproveRequest(ctx, input.OrganizationID, input.RequestID, input.CurrentUser, normalizeOptional(input.DecisionComment))
-	if err != nil {
+	comment := normalizeOptional(input.DecisionComment)
+	var approved domainprocurement.Request
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		updated, err := repo.ApproveRequest(ctx, input.OrganizationID, input.RequestID, input.CurrentUser, comment)
+		if err != nil {
+			return err
+		}
+
+		summary := "Approved procurement request"
+		metadata := map[string]any{
+			"request_status": string(updated.Status),
+		}
+		if comment != nil {
+			metadata["decision_comment"] = *comment
+		}
+		if _, err := repo.CreateActivityLog(ctx, applicationactivitylog.CreateParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeProcurementRequest),
+			EntityID:       input.RequestID,
+			Action:         domainactivitylog.ActionProcurementRequestApproved,
+			Summary:        &summary,
+			Metadata:       metadata,
+		}); err != nil {
+			return err
+		}
+
+		approved = updated
+		return nil
+	}); err != nil {
 		if errors.Is(err, ErrProcurementRequestNotFound) {
 			return domainprocurement.Request{}, err
 		}
@@ -400,8 +506,36 @@ func (s Service) RejectRequest(ctx context.Context, input DecisionInput) (domain
 		return domainprocurement.Request{}, ErrInvalidProcurementRequest
 	}
 
-	rejected, err := s.repo.RejectRequest(ctx, input.OrganizationID, input.RequestID, input.CurrentUser, normalizeOptional(input.DecisionComment))
-	if err != nil {
+	comment := normalizeOptional(input.DecisionComment)
+	var rejected domainprocurement.Request
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		updated, err := repo.RejectRequest(ctx, input.OrganizationID, input.RequestID, input.CurrentUser, comment)
+		if err != nil {
+			return err
+		}
+
+		summary := "Rejected procurement request"
+		metadata := map[string]any{
+			"request_status": string(updated.Status),
+		}
+		if comment != nil {
+			metadata["decision_comment"] = *comment
+		}
+		if _, err := repo.CreateActivityLog(ctx, applicationactivitylog.CreateParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeProcurementRequest),
+			EntityID:       input.RequestID,
+			Action:         domainactivitylog.ActionProcurementRequestRejected,
+			Summary:        &summary,
+			Metadata:       metadata,
+		}); err != nil {
+			return err
+		}
+
+		rejected = updated
+		return nil
+	}); err != nil {
 		if errors.Is(err, ErrProcurementRequestNotFound) {
 			return domainprocurement.Request{}, err
 		}
@@ -428,8 +562,31 @@ func (s Service) CancelRequest(ctx context.Context, input CancelRequestInput) (d
 		return domainprocurement.Request{}, ErrInvalidProcurementRequest
 	}
 
-	cancelled, err := s.repo.CancelRequest(ctx, input.OrganizationID, input.RequestID, input.CurrentUser)
-	if err != nil {
+	var cancelled domainprocurement.Request
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		updated, err := repo.CancelRequest(ctx, input.OrganizationID, input.RequestID, input.CurrentUser)
+		if err != nil {
+			return err
+		}
+
+		summary := "Cancelled procurement request"
+		if _, err := repo.CreateActivityLog(ctx, applicationactivitylog.CreateParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeProcurementRequest),
+			EntityID:       input.RequestID,
+			Action:         domainactivitylog.ActionProcurementRequestCanceled,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"request_status": string(updated.Status),
+			},
+		}); err != nil {
+			return err
+		}
+
+		cancelled = updated
+		return nil
+	}); err != nil {
 		if errors.Is(err, ErrProcurementRequestNotFound) {
 			return domainprocurement.Request{}, err
 		}
@@ -497,18 +654,43 @@ func (s Service) CreateItem(ctx context.Context, input CreateItemInput) (domainp
 		return domainprocurement.Item{}, err
 	}
 
-	created, err := s.repo.CreateItem(ctx, CreateItemParams{
-		OrganizationID:       input.OrganizationID,
-		ProcurementRequestID: input.RequestID,
-		LineNumber:           nextLineNumber,
-		ItemName:             params.ItemName,
-		Description:          params.Description,
-		Quantity:             params.Quantity,
-		Unit:                 params.Unit,
-		EstimatedUnitPrice:   params.EstimatedUnitPrice,
-		NeededByDate:         params.NeededByDate,
-	})
-	if err != nil {
+	var created domainprocurement.Item
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		item, err := repo.CreateItem(ctx, CreateItemParams{
+			OrganizationID:       input.OrganizationID,
+			ProcurementRequestID: input.RequestID,
+			LineNumber:           nextLineNumber,
+			ItemName:             params.ItemName,
+			Description:          params.Description,
+			Quantity:             params.Quantity,
+			Unit:                 params.Unit,
+			EstimatedUnitPrice:   params.EstimatedUnitPrice,
+			NeededByDate:         params.NeededByDate,
+		})
+		if err != nil {
+			return err
+		}
+
+		summary := "Added procurement request item"
+		if _, err := repo.CreateActivityLog(ctx, applicationactivitylog.CreateParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeProcurementRequest),
+			EntityID:       input.RequestID,
+			Action:         domainactivitylog.ActionProcurementRequestItemAdded,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"item_id":     item.ID.String(),
+				"line_number": item.LineNumber,
+				"item_name":   item.ItemName,
+			},
+		}); err != nil {
+			return err
+		}
+
+		created = item
+		return nil
+	}); err != nil {
 		return domainprocurement.Item{}, fmt.Errorf("create procurement request item: %w", err)
 	}
 
@@ -577,18 +759,43 @@ func (s Service) UpdateItem(ctx context.Context, input UpdateItemInput) (domainp
 		return domainprocurement.Item{}, err
 	}
 
-	updated, err := s.repo.UpdateItem(ctx, UpdateItemParams{
-		OrganizationID:       input.OrganizationID,
-		ProcurementRequestID: input.RequestID,
-		ItemID:               input.ItemID,
-		ItemName:             params.ItemName,
-		Description:          params.Description,
-		Quantity:             params.Quantity,
-		Unit:                 params.Unit,
-		EstimatedUnitPrice:   params.EstimatedUnitPrice,
-		NeededByDate:         params.NeededByDate,
-	})
-	if err != nil {
+	var updated domainprocurement.Item
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		item, err := repo.UpdateItem(ctx, UpdateItemParams{
+			OrganizationID:       input.OrganizationID,
+			ProcurementRequestID: input.RequestID,
+			ItemID:               input.ItemID,
+			ItemName:             params.ItemName,
+			Description:          params.Description,
+			Quantity:             params.Quantity,
+			Unit:                 params.Unit,
+			EstimatedUnitPrice:   params.EstimatedUnitPrice,
+			NeededByDate:         params.NeededByDate,
+		})
+		if err != nil {
+			return err
+		}
+
+		summary := "Updated procurement request item"
+		if _, err := repo.CreateActivityLog(ctx, applicationactivitylog.CreateParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeProcurementRequest),
+			EntityID:       input.RequestID,
+			Action:         domainactivitylog.ActionProcurementRequestItemUpdated,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"item_id":     item.ID.String(),
+				"line_number": item.LineNumber,
+				"item_name":   item.ItemName,
+			},
+		}); err != nil {
+			return err
+		}
+
+		updated = item
+		return nil
+	}); err != nil {
 		if errors.Is(err, ErrProcurementItemNotFound) {
 			return domainprocurement.Item{}, err
 		}
@@ -615,7 +822,28 @@ func (s Service) DeleteItem(ctx context.Context, input DeleteItemInput) error {
 		return ErrInvalidProcurementRequest
 	}
 
-	if err := s.repo.DeleteItem(ctx, input.OrganizationID, input.RequestID, input.ItemID); err != nil {
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		if err := repo.DeleteItem(ctx, input.OrganizationID, input.RequestID, input.ItemID); err != nil {
+			return err
+		}
+
+		summary := "Deleted procurement request item"
+		if _, err := repo.CreateActivityLog(ctx, applicationactivitylog.CreateParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeProcurementRequest),
+			EntityID:       input.RequestID,
+			Action:         domainactivitylog.ActionProcurementRequestItemDeleted,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"item_id": input.ItemID.String(),
+			},
+		}); err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
 		if errors.Is(err, ErrProcurementItemNotFound) {
 			return err
 		}

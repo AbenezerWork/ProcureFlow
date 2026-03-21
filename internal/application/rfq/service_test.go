@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	applicationactivitylog "github.com/AbenezerWork/ProcureFlow/internal/application/activitylog"
+	domainactivitylog "github.com/AbenezerWork/ProcureFlow/internal/domain/activitylog"
 	domainorganization "github.com/AbenezerWork/ProcureFlow/internal/domain/organization"
 	domainprocurement "github.com/AbenezerWork/ProcureFlow/internal/domain/procurement"
 	domainrfq "github.com/AbenezerWork/ProcureFlow/internal/domain/rfq"
@@ -31,6 +33,7 @@ type fakeRepository struct {
 	getProcurementRequestFn       func(context.Context, uuid.UUID, uuid.UUID) (domainprocurement.Request, error)
 	listProcurementRequestItemsFn func(context.Context, uuid.UUID, uuid.UUID) ([]domainprocurement.Item, error)
 	getVendorFn                   func(context.Context, uuid.UUID, uuid.UUID) (domainvendor.Vendor, error)
+	createActivityLogFn           func(context.Context, applicationactivitylog.CreateParams) (domainactivitylog.Entry, error)
 }
 
 func (f fakeRepository) CreateRFQ(ctx context.Context, params CreateRFQParams) (domainrfq.RFQ, error) {
@@ -83,6 +86,12 @@ func (f fakeRepository) ListProcurementRequestItems(ctx context.Context, organiz
 }
 func (f fakeRepository) GetVendor(ctx context.Context, organizationID, vendorID uuid.UUID) (domainvendor.Vendor, error) {
 	return f.getVendorFn(ctx, organizationID, vendorID)
+}
+func (f fakeRepository) CreateActivityLog(ctx context.Context, params applicationactivitylog.CreateParams) (domainactivitylog.Entry, error) {
+	if f.createActivityLogFn == nil {
+		return domainactivitylog.Entry{}, nil
+	}
+	return f.createActivityLogFn(ctx, params)
 }
 
 type fakeTxManager struct {
@@ -146,6 +155,12 @@ func TestServiceCreateSnapshotsApprovedRequestItems(t *testing.T) {
 				CreatedAt:      now,
 				UpdatedAt:      now,
 			}, nil
+		},
+		createActivityLogFn: func(_ context.Context, params applicationactivitylog.CreateParams) (domainactivitylog.Entry, error) {
+			if params.EntityType != string(domainactivitylog.EntityTypeRFQ) || params.Action != domainactivitylog.ActionRFQCreated {
+				t.Fatalf("unexpected activity log payload: %#v", params)
+			}
+			return domainactivitylog.Entry{EntityID: params.EntityID, Action: params.Action}, nil
 		},
 	}
 

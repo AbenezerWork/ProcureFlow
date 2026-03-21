@@ -7,6 +7,7 @@ import (
 	"time"
 
 	applicationidentity "github.com/AbenezerWork/ProcureFlow/internal/application/identity"
+	domainactivitylog "github.com/AbenezerWork/ProcureFlow/internal/domain/activitylog"
 	domainidentity "github.com/AbenezerWork/ProcureFlow/internal/domain/identity"
 	domainorganization "github.com/AbenezerWork/ProcureFlow/internal/domain/organization"
 	"github.com/google/uuid"
@@ -22,6 +23,7 @@ type fakeRepository struct {
 	updateMembershipRoleFn   func(context.Context, uuid.UUID, uuid.UUID, domainorganization.MembershipRole) (domainorganization.Membership, error)
 	updateMembershipStatusFn func(context.Context, uuid.UUID, uuid.UUID, domainorganization.MembershipStatus) (domainorganization.Membership, error)
 	listUserOrgsFn           func(context.Context, uuid.UUID) ([]domainorganization.UserOrganization, error)
+	createActivityLogFn      func(context.Context, CreateActivityLogParams) (domainactivitylog.Entry, error)
 }
 
 func (f fakeRepository) CreateOrganization(ctx context.Context, params CreateOrganizationParams) (domainorganization.Organization, error) {
@@ -60,12 +62,27 @@ func (f fakeRepository) ListUserOrganizations(ctx context.Context, userID uuid.U
 	return f.listUserOrgsFn(ctx, userID)
 }
 
+func (f fakeRepository) CreateActivityLog(ctx context.Context, params CreateActivityLogParams) (domainactivitylog.Entry, error) {
+	if f.createActivityLogFn == nil {
+		return domainactivitylog.Entry{}, nil
+	}
+	return f.createActivityLogFn(ctx, params)
+}
+
 type fakeTxManager struct {
 	withTransactionFn func(context.Context, func(Repository) error) error
 }
 
 func (f fakeTxManager) WithinTransaction(ctx context.Context, fn func(Repository) error) error {
 	return f.withTransactionFn(ctx, fn)
+}
+
+func passthroughTx(repo Repository) fakeTxManager {
+	return fakeTxManager{
+		withTransactionFn: func(ctx context.Context, fn func(Repository) error) error {
+			return fn(repo)
+		},
+	}
 }
 
 type fakeUserDirectory struct {
@@ -87,6 +104,8 @@ func TestServiceCreate(t *testing.T) {
 	now := time.Now().UTC()
 	userID := uuid.New()
 	orgID := uuid.New()
+	loggedOrganization := false
+	loggedMembership := false
 
 	repo := fakeRepository{
 		createOrganizationFn: func(_ context.Context, params CreateOrganizationParams) (domainorganization.Organization, error) {
@@ -124,6 +143,17 @@ func TestServiceCreate(t *testing.T) {
 				UpdatedAt:       now,
 			}, nil
 		},
+		createActivityLogFn: func(_ context.Context, params CreateActivityLogParams) (domainactivitylog.Entry, error) {
+			switch {
+			case params.EntityType == string(domainactivitylog.EntityTypeOrganization) && params.Action == domainactivitylog.ActionOrganizationCreated:
+				loggedOrganization = true
+			case params.EntityType == string(domainactivitylog.EntityTypeMembership) && params.Action == domainactivitylog.ActionMembershipCreated:
+				loggedMembership = true
+			default:
+				t.Fatalf("unexpected activity log payload: %#v", params)
+			}
+			return domainactivitylog.Entry{EntityID: params.EntityID, Action: params.Action}, nil
+		},
 	}
 
 	service := NewService(repo, fakeTxManager{
@@ -142,6 +172,9 @@ func TestServiceCreate(t *testing.T) {
 
 	if created.Organization.ID != orgID {
 		t.Fatalf("expected organization ID %s, got %s", orgID, created.Organization.ID)
+	}
+	if !loggedOrganization || !loggedMembership {
+		t.Fatalf("expected organization and membership activity logs to be written")
 	}
 }
 
@@ -178,7 +211,7 @@ func TestServiceGetReturnsOrganizationForActiveMember(t *testing.T) {
 		},
 	}
 
-	service := NewService(repo, fakeTxManager{}, fakeUserDirectory{})
+	service := NewService(repo, passthroughTx(repo), fakeUserDirectory{})
 
 	got, err := service.Get(context.Background(), orgID, userID)
 	if err != nil {
@@ -241,7 +274,7 @@ func TestServiceUpdateNormalizesSlugFromName(t *testing.T) {
 		},
 	}
 
-	service := NewService(repo, fakeTxManager{}, fakeUserDirectory{})
+	service := NewService(repo, passthroughTx(repo), fakeUserDirectory{})
 	name := "Acme & Sons"
 
 	updated, err := service.Update(context.Background(), UpdateInput{
@@ -314,7 +347,7 @@ func TestServiceAddMembershipByEmail(t *testing.T) {
 		},
 	}
 
-	service := NewService(repo, fakeTxManager{}, fakeUserDirectory{
+	service := NewService(repo, passthroughTx(repo), fakeUserDirectory{
 		getUserByEmailFn: func(_ context.Context, email string) (domainidentity.User, error) {
 			if email != "member@example.com" {
 				t.Fatalf("unexpected email: %s", email)
@@ -370,7 +403,7 @@ func TestServiceAddMembershipRejectsAdminCreatingOwner(t *testing.T) {
 		},
 	}
 
-	service := NewService(repo, fakeTxManager{}, fakeUserDirectory{
+	service := NewService(repo, passthroughTx(repo), fakeUserDirectory{
 		getUserByIDFn: func(_ context.Context, id uuid.UUID) (domainidentity.User, error) {
 			return domainidentity.User{ID: id, Email: "target@example.com", FullName: "Target", IsActive: true, CreatedAt: now, UpdatedAt: now}, nil
 		},
@@ -417,7 +450,7 @@ func TestServiceListMembershipsRequiresManagerRole(t *testing.T) {
 		},
 	}
 
-	service := NewService(repo, fakeTxManager{}, fakeUserDirectory{})
+	service := NewService(repo, passthroughTx(repo), fakeUserDirectory{})
 
 	_, err := service.ListMemberships(context.Background(), orgID, userID)
 	if !errors.Is(err, ErrForbiddenOrganization) {
@@ -451,7 +484,7 @@ func TestServiceUpdateMembershipRejectsOwnMembership(t *testing.T) {
 		},
 	}
 
-	service := NewService(repo, fakeTxManager{}, fakeUserDirectory{})
+	service := NewService(repo, passthroughTx(repo), fakeUserDirectory{})
 	role := domainorganization.MembershipRoleAdmin
 
 	_, err := service.UpdateMembership(context.Background(), UpdateMembershipInput{
@@ -537,7 +570,7 @@ func TestServiceUpdateMembershipUpdatesRoleAndStatus(t *testing.T) {
 		},
 	}
 
-	service := NewService(repo, fakeTxManager{}, fakeUserDirectory{
+	service := NewService(repo, passthroughTx(repo), fakeUserDirectory{
 		getUserByIDFn: func(_ context.Context, id uuid.UUID) (domainidentity.User, error) {
 			return domainidentity.User{ID: id, Email: "target@example.com", FullName: "Target", IsActive: true, CreatedAt: now, UpdatedAt: now}, nil
 		},
@@ -686,7 +719,7 @@ func TestServiceTransferOwnershipRequiresOwner(t *testing.T) {
 		},
 	}
 
-	service := NewService(repo, fakeTxManager{}, fakeUserDirectory{})
+	service := NewService(repo, passthroughTx(repo), fakeUserDirectory{})
 
 	_, err := service.TransferOwnership(context.Background(), TransferOwnershipInput{
 		OrganizationID: orgID,

@@ -972,6 +972,55 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/activity-logs:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+    get:
+      tags: [Activity Logs]
+      summary: List activity logs for an entity timeline
+      description: Lists timeline-ready activity logs for a specific organization-scoped entity. Any active organization member may perform this action.
+      operationId: listActivityLogs
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: entity_type
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Entity type to query, for example `procurement_request`, `rfq`, or `quotation`.
+        - name: entity_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Activity log entries for the requested entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListActivityLogsResponse'
+        '400':
+          description: Invalid organization identifier or entity query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot access activity logs for this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/organizations/{organizationID}/procurement-requests:
     parameters:
       - $ref: '#/components/parameters/OrganizationID'
@@ -2037,6 +2086,469 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/rfqs/{rfqID}/quotations:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RFQID'
+    get:
+      tags: [Quotations]
+      summary: List quotations for an RFQ
+      description: Lists quotations for an RFQ. Any active organization member may perform this action.
+      operationId: listQuotations
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Quotations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListQuotationsResponse'
+        '400':
+          description: Invalid organization or RFQ identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot access this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: RFQ not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [Quotations]
+      summary: Create a quotation for an RFQ vendor
+      description: Creates a draft quotation for an attached RFQ vendor and snapshots the current RFQ items into quotation items with initial zero pricing. Active `owner`, `admin`, and `procurement_officer` memberships may perform this action.
+      operationId: createQuotation
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateQuotationRequest'
+      responses:
+        '201':
+          description: Draft quotation created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotationResponse'
+        '400':
+          description: Invalid quotation input or RFQ state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot create quotations in this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: RFQ vendor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: A quotation already exists for this RFQ vendor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/rfqs/{rfqID}/quotations/{quotationID}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RFQID'
+      - $ref: '#/components/parameters/QuotationID'
+    get:
+      tags: [Quotations]
+      summary: Get a quotation
+      description: Returns a quotation. Any active organization member may perform this action.
+      operationId: getQuotation
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Quotation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotationResponse'
+        '400':
+          description: Invalid organization, RFQ, or quotation identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot access this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Quotation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      tags: [Quotations]
+      summary: Update a draft quotation
+      description: Updates a draft quotation while the RFQ remains `published`. Active `owner`, `admin`, and `procurement_officer` memberships may perform this action.
+      operationId: updateQuotation
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateQuotationRequest'
+      responses:
+        '200':
+          description: Updated quotation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotationResponse'
+        '400':
+          description: Invalid quotation update or RFQ state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot update quotations in this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Quotation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/rfqs/{rfqID}/quotations/{quotationID}/submit:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RFQID'
+      - $ref: '#/components/parameters/QuotationID'
+    post:
+      tags: [Quotations]
+      summary: Submit a quotation
+      description: Submits a draft quotation while the RFQ remains `published`. Active `owner`, `admin`, and `procurement_officer` memberships may perform this action.
+      operationId: submitQuotation
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Submitted quotation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotationResponse'
+        '400':
+          description: Invalid quotation transition or incomplete pricing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot submit quotations in this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Quotation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/rfqs/{rfqID}/quotations/{quotationID}/reject:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RFQID'
+      - $ref: '#/components/parameters/QuotationID'
+    post:
+      tags: [Quotations]
+      summary: Reject a quotation
+      description: Rejects a draft or submitted quotation while the RFQ is still actionable. Active `owner`, `admin`, and `procurement_officer` memberships may perform this action.
+      operationId: rejectQuotation
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectQuotationRequest'
+      responses:
+        '200':
+          description: Rejected quotation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotationResponse'
+        '400':
+          description: Invalid quotation transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot reject quotations in this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Quotation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/rfqs/{rfqID}/quotations/{quotationID}/items:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RFQID'
+      - $ref: '#/components/parameters/QuotationID'
+    get:
+      tags: [Quotations]
+      summary: List quotation items
+      description: Lists quotation items. Any active organization member may perform this action.
+      operationId: listQuotationItems
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Quotation items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListQuotationItemsResponse'
+        '400':
+          description: Invalid organization, RFQ, or quotation identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot access this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Quotation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/rfqs/{rfqID}/quotations/{quotationID}/items/{itemID}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RFQID'
+      - $ref: '#/components/parameters/QuotationID'
+      - $ref: '#/components/parameters/ItemID'
+    patch:
+      tags: [Quotations]
+      summary: Update quotation item pricing
+      description: Updates pricing and delivery details on a quotation item while the quotation is `draft` and the RFQ remains `published`. Active `owner`, `admin`, and `procurement_officer` memberships may perform this action.
+      operationId: updateQuotationItem
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateQuotationItemRequest'
+      responses:
+        '200':
+          description: Updated quotation item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotationItemResponse'
+        '400':
+          description: Invalid quotation item update
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot modify quotations in this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Quotation or item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/rfqs/{rfqID}/award:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RFQID'
+    get:
+      tags: [Awards]
+      summary: Get the RFQ award
+      description: Returns the award for an RFQ. Any active organization member may perform this action.
+      operationId: getAward
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Award
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AwardResponse'
+        '400':
+          description: Invalid organization or RFQ identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot access this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Award not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [Awards]
+      summary: Create an RFQ award
+      description: Creates an award from an eligible submitted quotation and marks the RFQ as `awarded`. Active `owner`, `admin`, and `procurement_officer` memberships may perform this action.
+      operationId: createAward
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAwardRequest'
+      responses:
+        '201':
+          description: Award created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AwardResponse'
+        '400':
+          description: Invalid award input or RFQ state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot create awards in this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: RFQ or quotation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: An award already exists for this RFQ or quotation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   parameters:
     TenantHeader:
@@ -2083,6 +2595,13 @@ components:
         format: uuid
     RFQID:
       name: rfqID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    QuotationID:
+      name: quotationID
       in: path
       required: true
       schema:
@@ -3031,3 +3550,293 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RFQVendorResponse'
+    CreateQuotationRequest:
+      type: object
+      additionalProperties: false
+      required: [rfq_vendor_id]
+      properties:
+        rfq_vendor_id:
+          type: string
+          format: uuid
+        currency_code:
+          type: string
+        lead_time_days:
+          type: integer
+          minimum: 0
+        payment_terms:
+          type: string
+        notes:
+          type: string
+    UpdateQuotationRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        currency_code:
+          type: string
+        lead_time_days:
+          type: integer
+          minimum: 0
+        payment_terms:
+          type: string
+        notes:
+          type: string
+    RejectQuotationRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        rejection_reason:
+          type: string
+    QuotationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - organization_id
+        - rfq_id
+        - rfq_vendor_id
+        - status
+        - currency_code
+        - created_by_user_id
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        rfq_id:
+          type: string
+          format: uuid
+        rfq_vendor_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - draft
+            - submitted
+            - rejected
+        currency_code:
+          type: string
+        lead_time_days:
+          type: integer
+          nullable: true
+        payment_terms:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        vendor_name:
+          type: string
+          nullable: true
+        submitted_at:
+          type: string
+          format: date-time
+        submitted_by_user_id:
+          type: string
+          format: uuid
+        rejected_at:
+          type: string
+          format: date-time
+        rejected_by_user_id:
+          type: string
+          format: uuid
+        rejection_reason:
+          type: string
+          nullable: true
+        created_by_user_id:
+          type: string
+          format: uuid
+        updated_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ListQuotationsResponse:
+      type: object
+      additionalProperties: false
+      required: [quotations]
+      properties:
+        quotations:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuotationResponse'
+    QuotationItemResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - organization_id
+        - quotation_id
+        - rfq_id
+        - rfq_item_id
+        - line_number
+        - item_name
+        - quantity
+        - unit
+        - unit_price
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        quotation_id:
+          type: string
+          format: uuid
+        rfq_id:
+          type: string
+          format: uuid
+        rfq_item_id:
+          type: string
+          format: uuid
+        line_number:
+          type: integer
+        item_name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        quantity:
+          type: string
+        unit:
+          type: string
+        unit_price:
+          type: string
+        delivery_days:
+          type: integer
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ListQuotationItemsResponse:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuotationItemResponse'
+    UpdateQuotationItemRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        unit_price:
+          type: string
+        delivery_days:
+          type: integer
+          minimum: 0
+        notes:
+          type: string
+    CreateAwardRequest:
+      type: object
+      additionalProperties: false
+      required: [quotation_id, reason]
+      properties:
+        quotation_id:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          minLength: 1
+    AwardResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - organization_id
+        - rfq_id
+        - quotation_id
+        - awarded_by_user_id
+        - reason
+        - awarded_at
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        rfq_id:
+          type: string
+          format: uuid
+        quotation_id:
+          type: string
+          format: uuid
+        awarded_by_user_id:
+          type: string
+          format: uuid
+        reason:
+          type: string
+        awarded_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+    ActivityLogResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - organization_id
+        - entity_type
+        - entity_id
+        - action
+        - metadata
+        - occurred_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        actor_user_id:
+          type: string
+          format: uuid
+        entity_type:
+          type: string
+        entity_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+        summary:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        occurred_at:
+          type: string
+          format: date-time
+    ListActivityLogsResponse:
+      type: object
+      additionalProperties: false
+      required: [activity_logs]
+      properties:
+        activity_logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivityLogResponse'

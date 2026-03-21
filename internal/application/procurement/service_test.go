@@ -6,26 +6,29 @@ import (
 	"testing"
 	"time"
 
+	applicationactivitylog "github.com/AbenezerWork/ProcureFlow/internal/application/activitylog"
+	domainactivitylog "github.com/AbenezerWork/ProcureFlow/internal/domain/activitylog"
 	domainorganization "github.com/AbenezerWork/ProcureFlow/internal/domain/organization"
 	domainprocurement "github.com/AbenezerWork/ProcureFlow/internal/domain/procurement"
 	"github.com/google/uuid"
 )
 
 type fakeRepository struct {
-	createRequestFn  func(context.Context, CreateRequestParams) (domainprocurement.Request, error)
-	getRequestFn     func(context.Context, uuid.UUID, uuid.UUID) (domainprocurement.Request, error)
-	listRequestsFn   func(context.Context, uuid.UUID, *domainprocurement.RequestStatus) ([]domainprocurement.Request, error)
-	listInboxFn      func(context.Context, uuid.UUID) ([]domainprocurement.Request, error)
-	updateRequestFn  func(context.Context, UpdateRequestParams) (domainprocurement.Request, error)
-	submitRequestFn  func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (domainprocurement.Request, error)
-	approveRequestFn func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, *string) (domainprocurement.Request, error)
-	rejectRequestFn  func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, *string) (domainprocurement.Request, error)
-	cancelRequestFn  func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (domainprocurement.Request, error)
-	createItemFn     func(context.Context, CreateItemParams) (domainprocurement.Item, error)
-	listItemsFn      func(context.Context, uuid.UUID, uuid.UUID) ([]domainprocurement.Item, error)
-	updateItemFn     func(context.Context, UpdateItemParams) (domainprocurement.Item, error)
-	deleteItemFn     func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error
-	getMembershipFn  func(context.Context, uuid.UUID, uuid.UUID) (domainorganization.Membership, error)
+	createRequestFn     func(context.Context, CreateRequestParams) (domainprocurement.Request, error)
+	getRequestFn        func(context.Context, uuid.UUID, uuid.UUID) (domainprocurement.Request, error)
+	listRequestsFn      func(context.Context, uuid.UUID, *domainprocurement.RequestStatus) ([]domainprocurement.Request, error)
+	listInboxFn         func(context.Context, uuid.UUID) ([]domainprocurement.Request, error)
+	updateRequestFn     func(context.Context, UpdateRequestParams) (domainprocurement.Request, error)
+	submitRequestFn     func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (domainprocurement.Request, error)
+	approveRequestFn    func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, *string) (domainprocurement.Request, error)
+	rejectRequestFn     func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, *string) (domainprocurement.Request, error)
+	cancelRequestFn     func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (domainprocurement.Request, error)
+	createItemFn        func(context.Context, CreateItemParams) (domainprocurement.Item, error)
+	listItemsFn         func(context.Context, uuid.UUID, uuid.UUID) ([]domainprocurement.Item, error)
+	updateItemFn        func(context.Context, UpdateItemParams) (domainprocurement.Item, error)
+	deleteItemFn        func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error
+	getMembershipFn     func(context.Context, uuid.UUID, uuid.UUID) (domainorganization.Membership, error)
+	createActivityLogFn func(context.Context, applicationactivitylog.CreateParams) (domainactivitylog.Entry, error)
 }
 
 func (f fakeRepository) CreateRequest(ctx context.Context, params CreateRequestParams) (domainprocurement.Request, error) {
@@ -70,6 +73,20 @@ func (f fakeRepository) DeleteItem(ctx context.Context, organizationID, requestI
 func (f fakeRepository) GetMembership(ctx context.Context, organizationID, userID uuid.UUID) (domainorganization.Membership, error) {
 	return f.getMembershipFn(ctx, organizationID, userID)
 }
+func (f fakeRepository) CreateActivityLog(ctx context.Context, params applicationactivitylog.CreateParams) (domainactivitylog.Entry, error) {
+	if f.createActivityLogFn == nil {
+		return domainactivitylog.Entry{}, nil
+	}
+	return f.createActivityLogFn(ctx, params)
+}
+
+type fakeTxManager struct {
+	withinFn func(context.Context, func(Repository) error) error
+}
+
+func (f fakeTxManager) WithinTransaction(ctx context.Context, fn func(Repository) error) error {
+	return f.withinFn(ctx, fn)
+}
 
 func TestServiceCreateRequest(t *testing.T) {
 	t.Parallel()
@@ -109,7 +126,11 @@ func TestServiceCreateRequest(t *testing.T) {
 		},
 	}
 
-	service := NewService(repo)
+	service := NewService(repo, fakeTxManager{
+		withinFn: func(_ context.Context, fn func(Repository) error) error {
+			return fn(repo)
+		},
+	})
 	created, err := service.CreateRequest(context.Background(), CreateRequestInput{
 		OrganizationID:       orgID,
 		CurrentUser:          userID,
@@ -159,7 +180,11 @@ func TestServiceUpdateRequestRejectsNonOwnerRequester(t *testing.T) {
 		},
 	}
 
-	service := NewService(repo)
+	service := NewService(repo, fakeTxManager{
+		withinFn: func(_ context.Context, fn func(Repository) error) error {
+			return fn(repo)
+		},
+	})
 	title := "Updated"
 	_, err := service.UpdateRequest(context.Background(), UpdateRequestInput{
 		OrganizationID: orgID,
@@ -221,7 +246,11 @@ func TestServiceCreateItemAssignsNextLineNumber(t *testing.T) {
 		},
 	}
 
-	service := NewService(repo)
+	service := NewService(repo, fakeTxManager{
+		withinFn: func(_ context.Context, fn func(Repository) error) error {
+			return fn(repo)
+		},
+	})
 	item, err := service.CreateItem(context.Background(), CreateItemInput{
 		OrganizationID: orgID,
 		RequestID:      requestID,
@@ -262,7 +291,11 @@ func TestServiceListApprovalInboxAllowsApprover(t *testing.T) {
 		},
 	}
 
-	service := NewService(repo)
+	service := NewService(repo, fakeTxManager{
+		withinFn: func(_ context.Context, fn func(Repository) error) error {
+			return fn(repo)
+		},
+	})
 	requests, err := service.ListApprovalInbox(context.Background(), ListApprovalInboxInput{
 		OrganizationID: orgID,
 		CurrentUser:    userID,
@@ -302,7 +335,11 @@ func TestServiceApproveRequestRejectsRequesterRole(t *testing.T) {
 		},
 	}
 
-	service := NewService(repo)
+	service := NewService(repo, fakeTxManager{
+		withinFn: func(_ context.Context, fn func(Repository) error) error {
+			return fn(repo)
+		},
+	})
 	_, err := service.ApproveRequest(context.Background(), DecisionInput{
 		OrganizationID: orgID,
 		RequestID:      requestID,
@@ -321,6 +358,7 @@ func TestServiceApproveRequestAllowsApprover(t *testing.T) {
 	userID := uuid.New()
 	now := time.Now().UTC()
 	comment := "approved for next stage"
+	logged := false
 
 	repo := fakeRepository{
 		getMembershipFn: func(_ context.Context, _, _ uuid.UUID) (domainorganization.Membership, error) {
@@ -351,9 +389,20 @@ func TestServiceApproveRequestAllowsApprover(t *testing.T) {
 				ApprovedAt:      &now,
 			}, nil
 		},
+		createActivityLogFn: func(_ context.Context, params applicationactivitylog.CreateParams) (domainactivitylog.Entry, error) {
+			logged = true
+			if params.EntityType != string(domainactivitylog.EntityTypeProcurementRequest) || params.Action != domainactivitylog.ActionProcurementRequestApproved {
+				t.Fatalf("unexpected activity log payload: %#v", params)
+			}
+			return domainactivitylog.Entry{EntityID: params.EntityID, Action: params.Action}, nil
+		},
 	}
 
-	service := NewService(repo)
+	service := NewService(repo, fakeTxManager{
+		withinFn: func(_ context.Context, fn func(Repository) error) error {
+			return fn(repo)
+		},
+	})
 	request, err := service.ApproveRequest(context.Background(), DecisionInput{
 		OrganizationID:  orgID,
 		RequestID:       requestID,
@@ -365,6 +414,9 @@ func TestServiceApproveRequestAllowsApprover(t *testing.T) {
 	}
 	if request.Status != domainprocurement.RequestStatusApproved {
 		t.Fatalf("expected approved status, got %s", request.Status)
+	}
+	if !logged {
+		t.Fatalf("expected activity log to be written")
 	}
 }
 
@@ -395,7 +447,11 @@ func TestServiceRejectRequestRequiresSubmittedStatus(t *testing.T) {
 		},
 	}
 
-	service := NewService(repo)
+	service := NewService(repo, fakeTxManager{
+		withinFn: func(_ context.Context, fn func(Repository) error) error {
+			return fn(repo)
+		},
+	})
 	_, err := service.RejectRequest(context.Background(), DecisionInput{
 		OrganizationID: orgID,
 		RequestID:      requestID,
@@ -412,6 +468,7 @@ func TestServiceSubmitRequestAllowsManager(t *testing.T) {
 	orgID := uuid.New()
 	requestID := uuid.New()
 	currentUser := uuid.New()
+	logged := false
 
 	repo := fakeRepository{
 		getMembershipFn: func(_ context.Context, _, _ uuid.UUID) (domainorganization.Membership, error) {
@@ -443,9 +500,20 @@ func TestServiceSubmitRequestAllowsManager(t *testing.T) {
 				CurrencyCode:    "USD",
 			}, nil
 		},
+		createActivityLogFn: func(_ context.Context, params applicationactivitylog.CreateParams) (domainactivitylog.Entry, error) {
+			logged = true
+			if params.EntityType != string(domainactivitylog.EntityTypeProcurementRequest) || params.Action != domainactivitylog.ActionProcurementRequestSubmitted {
+				t.Fatalf("unexpected activity log payload: %#v", params)
+			}
+			return domainactivitylog.Entry{EntityID: params.EntityID, Action: params.Action}, nil
+		},
 	}
 
-	service := NewService(repo)
+	service := NewService(repo, fakeTxManager{
+		withinFn: func(_ context.Context, fn func(Repository) error) error {
+			return fn(repo)
+		},
+	})
 	request, err := service.SubmitRequest(context.Background(), SubmitRequestInput{
 		OrganizationID: orgID,
 		RequestID:      requestID,
@@ -456,6 +524,79 @@ func TestServiceSubmitRequestAllowsManager(t *testing.T) {
 	}
 	if request.Status != domainprocurement.RequestStatusSubmitted {
 		t.Fatalf("expected submitted status, got %s", request.Status)
+	}
+	if !logged {
+		t.Fatalf("expected activity log to be written")
+	}
+}
+
+func TestServiceRejectRequestWritesActivityLog(t *testing.T) {
+	t.Parallel()
+
+	orgID := uuid.New()
+	requestID := uuid.New()
+	userID := uuid.New()
+	now := time.Now().UTC()
+	comment := "budget constraints"
+	logged := false
+
+	repo := fakeRepository{
+		getMembershipFn: func(_ context.Context, _, _ uuid.UUID) (domainorganization.Membership, error) {
+			return domainorganization.Membership{
+				Role:   domainorganization.MembershipRoleApprover,
+				Status: domainorganization.MembershipStatusActive,
+			}, nil
+		},
+		getRequestFn: func(_ context.Context, _, _ uuid.UUID) (domainprocurement.Request, error) {
+			return domainprocurement.Request{
+				ID:             requestID,
+				OrganizationID: orgID,
+				Status:         domainprocurement.RequestStatusSubmitted,
+			}, nil
+		},
+		rejectRequestFn: func(_ context.Context, gotOrgID, gotRequestID, gotUserID uuid.UUID, gotComment *string) (domainprocurement.Request, error) {
+			if gotOrgID != orgID || gotRequestID != requestID || gotUserID != userID {
+				t.Fatalf("unexpected reject args")
+			}
+			if gotComment == nil || *gotComment != comment {
+				t.Fatalf("unexpected comment: %#v", gotComment)
+			}
+			return domainprocurement.Request{
+				ID:              requestID,
+				OrganizationID:  orgID,
+				Status:          domainprocurement.RequestStatusRejected,
+				DecisionComment: gotComment,
+				RejectedAt:      &now,
+			}, nil
+		},
+		createActivityLogFn: func(_ context.Context, params applicationactivitylog.CreateParams) (domainactivitylog.Entry, error) {
+			logged = true
+			if params.EntityType != string(domainactivitylog.EntityTypeProcurementRequest) || params.Action != domainactivitylog.ActionProcurementRequestRejected {
+				t.Fatalf("unexpected activity log payload: %#v", params)
+			}
+			return domainactivitylog.Entry{EntityID: params.EntityID, Action: params.Action}, nil
+		},
+	}
+
+	service := NewService(repo, fakeTxManager{
+		withinFn: func(_ context.Context, fn func(Repository) error) error {
+			return fn(repo)
+		},
+	})
+	request, err := service.RejectRequest(context.Background(), DecisionInput{
+		OrganizationID:  orgID,
+		RequestID:       requestID,
+		CurrentUser:     userID,
+		DecisionComment: &comment,
+	})
+	if err != nil {
+		t.Fatalf("reject request returned error: %v", err)
+	}
+	if request.Status != domainprocurement.RequestStatusRejected {
+		t.Fatalf("expected rejected status, got %s", request.Status)
+	}
+	if !logged {
+		t.Fatalf("expected activity log to be written")
 	}
 }
 
@@ -490,7 +631,11 @@ func TestServiceDeleteItemRejectsNonDraftRequest(t *testing.T) {
 		},
 	}
 
-	service := NewService(repo)
+	service := NewService(repo, fakeTxManager{
+		withinFn: func(_ context.Context, fn func(Repository) error) error {
+			return fn(repo)
+		},
+	})
 	err := service.DeleteItem(context.Background(), DeleteItemInput{
 		OrganizationID: orgID,
 		RequestID:      requestID,

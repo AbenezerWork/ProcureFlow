@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	applicationactivitylog "github.com/AbenezerWork/ProcureFlow/internal/application/activitylog"
+	domainactivitylog "github.com/AbenezerWork/ProcureFlow/internal/domain/activitylog"
 	domainorganization "github.com/AbenezerWork/ProcureFlow/internal/domain/organization"
 	domainprocurement "github.com/AbenezerWork/ProcureFlow/internal/domain/procurement"
 	domainrfq "github.com/AbenezerWork/ProcureFlow/internal/domain/rfq"
@@ -72,6 +74,7 @@ type Repository interface {
 	GetProcurementRequest(ctx context.Context, organizationID, requestID uuid.UUID) (domainprocurement.Request, error)
 	ListProcurementRequestItems(ctx context.Context, organizationID, requestID uuid.UUID) ([]domainprocurement.Item, error)
 	GetVendor(ctx context.Context, organizationID, vendorID uuid.UUID) (domainvendor.Vendor, error)
+	CreateActivityLog(ctx context.Context, params applicationactivitylog.CreateParams) (domainactivitylog.Entry, error)
 }
 
 type TransactionManager interface {
@@ -207,6 +210,22 @@ func (s Service) Create(ctx context.Context, input CreateInput) (domainrfq.RFQ, 
 			}
 		}
 
+		summary := "Created RFQ from approved procurement request"
+		if _, err := repo.CreateActivityLog(ctx, applicationactivitylog.CreateParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeRFQ),
+			EntityID:       rfq.ID,
+			Action:         domainactivitylog.ActionRFQCreated,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"procurement_request_id": input.ProcurementRequestID.String(),
+				"item_count":             len(sourceItems),
+			},
+		}); err != nil {
+			return err
+		}
+
 		created = rfq
 		return nil
 	}); err != nil {
@@ -295,14 +314,38 @@ func (s Service) Update(ctx context.Context, input UpdateInput) (domainrfq.RFQ, 
 		return domainrfq.RFQ{}, err
 	}
 
-	updated, err := s.repo.UpdateDraftRFQ(ctx, UpdateRFQParams{
-		OrganizationID:  input.OrganizationID,
-		RFQID:           input.RFQID,
-		ReferenceNumber: referenceNumber,
-		Title:           title,
-		Description:     description,
-	})
-	if err != nil {
+	var updated domainrfq.RFQ
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		next, err := repo.UpdateDraftRFQ(ctx, UpdateRFQParams{
+			OrganizationID:  input.OrganizationID,
+			RFQID:           input.RFQID,
+			ReferenceNumber: referenceNumber,
+			Title:           title,
+			Description:     description,
+		})
+		if err != nil {
+			return err
+		}
+
+		summary := "Updated RFQ"
+		if _, err := repo.CreateActivityLog(ctx, applicationactivitylog.CreateParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeRFQ),
+			EntityID:       input.RFQID,
+			Action:         domainactivitylog.ActionRFQUpdated,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"reference_number": next.ReferenceNumber,
+				"title":            next.Title,
+			},
+		}); err != nil {
+			return err
+		}
+
+		updated = next
+		return nil
+	}); err != nil {
 		if errors.Is(err, ErrRFQNotFound) || errors.Is(err, ErrRFQReferenceTaken) {
 			return domainrfq.RFQ{}, err
 		}
@@ -340,8 +383,31 @@ func (s Service) Publish(ctx context.Context, input TransitionInput) (domainrfq.
 		return domainrfq.RFQ{}, ErrInvalidRFQ
 	}
 
-	published, err := s.repo.PublishRFQ(ctx, input.OrganizationID, input.RFQID)
-	if err != nil {
+	var published domainrfq.RFQ
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		updated, err := repo.PublishRFQ(ctx, input.OrganizationID, input.RFQID)
+		if err != nil {
+			return err
+		}
+
+		summary := "Published RFQ"
+		if _, err := repo.CreateActivityLog(ctx, applicationactivitylog.CreateParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeRFQ),
+			EntityID:       input.RFQID,
+			Action:         domainactivitylog.ActionRFQPublished,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"rfq_status": string(updated.Status),
+			},
+		}); err != nil {
+			return err
+		}
+
+		published = updated
+		return nil
+	}); err != nil {
 		if errors.Is(err, ErrRFQNotFound) {
 			return domainrfq.RFQ{}, err
 		}
@@ -352,11 +418,15 @@ func (s Service) Publish(ctx context.Context, input TransitionInput) (domainrfq.
 }
 
 func (s Service) Close(ctx context.Context, input TransitionInput) (domainrfq.RFQ, error) {
-	return s.transition(ctx, input, domainrfq.StatusPublished, s.repo.CloseRFQ, "close rfq")
+	return s.transition(ctx, input, domainrfq.StatusPublished, func(repo Repository, ctx context.Context, organizationID, rfqID uuid.UUID) (domainrfq.RFQ, error) {
+		return repo.CloseRFQ(ctx, organizationID, rfqID)
+	}, "close rfq")
 }
 
 func (s Service) Evaluate(ctx context.Context, input TransitionInput) (domainrfq.RFQ, error) {
-	return s.transition(ctx, input, domainrfq.StatusClosed, s.repo.EvaluateRFQ, "evaluate rfq")
+	return s.transition(ctx, input, domainrfq.StatusClosed, func(repo Repository, ctx context.Context, organizationID, rfqID uuid.UUID) (domainrfq.RFQ, error) {
+		return repo.EvaluateRFQ(ctx, organizationID, rfqID)
+	}, "evaluate rfq")
 }
 
 func (s Service) Cancel(ctx context.Context, input TransitionInput) (domainrfq.RFQ, error) {
@@ -375,8 +445,31 @@ func (s Service) Cancel(ctx context.Context, input TransitionInput) (domainrfq.R
 		return domainrfq.RFQ{}, ErrInvalidRFQ
 	}
 
-	cancelled, err := s.repo.CancelRFQ(ctx, input.OrganizationID, input.RFQID, input.CurrentUser)
-	if err != nil {
+	var cancelled domainrfq.RFQ
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		updated, err := repo.CancelRFQ(ctx, input.OrganizationID, input.RFQID, input.CurrentUser)
+		if err != nil {
+			return err
+		}
+
+		summary := "Cancelled RFQ"
+		if _, err := repo.CreateActivityLog(ctx, applicationactivitylog.CreateParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeRFQ),
+			EntityID:       input.RFQID,
+			Action:         domainactivitylog.ActionRFQCanceled,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"rfq_status": string(updated.Status),
+			},
+		}); err != nil {
+			return err
+		}
+
+		cancelled = updated
+		return nil
+	}); err != nil {
 		if errors.Is(err, ErrRFQNotFound) {
 			return domainrfq.RFQ{}, err
 		}
@@ -457,8 +550,32 @@ func (s Service) AttachVendor(ctx context.Context, input AttachVendorInput) (dom
 		return domainrfq.VendorLink{}, ErrInvalidRFQ
 	}
 
-	attached, err := s.repo.AttachVendor(ctx, input.OrganizationID, input.RFQID, input.VendorID, input.CurrentUser)
-	if err != nil {
+	var attached domainrfq.VendorLink
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		link, err := repo.AttachVendor(ctx, input.OrganizationID, input.RFQID, input.VendorID, input.CurrentUser)
+		if err != nil {
+			return err
+		}
+
+		summary := "Attached vendor to RFQ"
+		if _, err := repo.CreateActivityLog(ctx, applicationactivitylog.CreateParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeRFQ),
+			EntityID:       input.RFQID,
+			Action:         domainactivitylog.ActionRFQVendorAttached,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"vendor_id":   link.VendorID.String(),
+				"vendor_name": link.VendorName,
+			},
+		}); err != nil {
+			return err
+		}
+
+		attached = link
+		return nil
+	}); err != nil {
 		if errors.Is(err, ErrRFQVendorAlreadyAttached) {
 			return domainrfq.VendorLink{}, err
 		}
@@ -484,7 +601,28 @@ func (s Service) RemoveVendor(ctx context.Context, input RemoveVendorInput) erro
 		return ErrInvalidRFQ
 	}
 
-	if err := s.repo.RemoveVendor(ctx, input.OrganizationID, input.RFQID, input.VendorID); err != nil {
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		if err := repo.RemoveVendor(ctx, input.OrganizationID, input.RFQID, input.VendorID); err != nil {
+			return err
+		}
+
+		summary := "Removed vendor from RFQ"
+		if _, err := repo.CreateActivityLog(ctx, applicationactivitylog.CreateParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeRFQ),
+			EntityID:       input.RFQID,
+			Action:         domainactivitylog.ActionRFQVendorRemoved,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"vendor_id": input.VendorID.String(),
+			},
+		}); err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
 		if errors.Is(err, ErrRFQVendorNotFound) {
 			return err
 		}
@@ -494,7 +632,7 @@ func (s Service) RemoveVendor(ctx context.Context, input RemoveVendorInput) erro
 	return nil
 }
 
-func (s Service) transition(ctx context.Context, input TransitionInput, expected domainrfq.Status, fn func(context.Context, uuid.UUID, uuid.UUID) (domainrfq.RFQ, error), action string) (domainrfq.RFQ, error) {
+func (s Service) transition(ctx context.Context, input TransitionInput, expected domainrfq.Status, fn func(Repository, context.Context, uuid.UUID, uuid.UUID) (domainrfq.RFQ, error), action string) (domainrfq.RFQ, error) {
 	if input.OrganizationID == uuid.Nil || input.RFQID == uuid.Nil || input.CurrentUser == uuid.Nil {
 		return domainrfq.RFQ{}, ErrInvalidRFQ
 	}
@@ -510,8 +648,41 @@ func (s Service) transition(ctx context.Context, input TransitionInput, expected
 		return domainrfq.RFQ{}, ErrInvalidRFQ
 	}
 
-	updated, err := fn(ctx, input.OrganizationID, input.RFQID)
-	if err != nil {
+	var updated domainrfq.RFQ
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		next, err := fn(repo, ctx, input.OrganizationID, input.RFQID)
+		if err != nil {
+			return err
+		}
+
+		logAction := domainactivitylog.ActionRFQUpdated
+		summary := "Updated RFQ"
+		switch expected {
+		case domainrfq.StatusPublished:
+			logAction = domainactivitylog.ActionRFQClosed
+			summary = "Closed RFQ"
+		case domainrfq.StatusClosed:
+			logAction = domainactivitylog.ActionRFQEvaluated
+			summary = "Evaluated RFQ"
+		}
+
+		if _, err := repo.CreateActivityLog(ctx, applicationactivitylog.CreateParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeRFQ),
+			EntityID:       input.RFQID,
+			Action:         logAction,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"rfq_status": string(next.Status),
+			},
+		}); err != nil {
+			return err
+		}
+
+		updated = next
+		return nil
+	}); err != nil {
 		if errors.Is(err, ErrRFQNotFound) {
 			return domainrfq.RFQ{}, err
 		}

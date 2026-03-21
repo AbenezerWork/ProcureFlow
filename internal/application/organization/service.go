@@ -7,7 +7,9 @@ import (
 	"regexp"
 	"strings"
 
+	applicationactivitylog "github.com/AbenezerWork/ProcureFlow/internal/application/activitylog"
 	applicationidentity "github.com/AbenezerWork/ProcureFlow/internal/application/identity"
+	domainactivitylog "github.com/AbenezerWork/ProcureFlow/internal/domain/activitylog"
 	domainidentity "github.com/AbenezerWork/ProcureFlow/internal/domain/identity"
 	domainorganization "github.com/AbenezerWork/ProcureFlow/internal/domain/organization"
 	"github.com/google/uuid"
@@ -46,6 +48,7 @@ type CreateMembershipParams struct {
 	Status          domainorganization.MembershipStatus
 	CreatedByUserID uuid.UUID
 }
+type CreateActivityLogParams = applicationactivitylog.CreateParams
 
 type Repository interface {
 	CreateOrganization(ctx context.Context, params CreateOrganizationParams) (domainorganization.Organization, error)
@@ -57,6 +60,7 @@ type Repository interface {
 	UpdateMembershipRole(ctx context.Context, organizationID, userID uuid.UUID, role domainorganization.MembershipRole) (domainorganization.Membership, error)
 	UpdateMembershipStatus(ctx context.Context, organizationID, userID uuid.UUID, status domainorganization.MembershipStatus) (domainorganization.Membership, error)
 	ListUserOrganizations(ctx context.Context, userID uuid.UUID) ([]domainorganization.UserOrganization, error)
+	CreateActivityLog(ctx context.Context, params CreateActivityLogParams) (domainactivitylog.Entry, error)
 }
 
 type TransactionManager interface {
@@ -172,6 +176,38 @@ func (s Service) Create(ctx context.Context, input CreateInput) (CreatedOrganiza
 			return err
 		}
 
+		orgSummary := "Created organization"
+		if _, err := repo.CreateActivityLog(ctx, CreateActivityLogParams{
+			OrganizationID: org.ID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeOrganization),
+			EntityID:       org.ID,
+			Action:         domainactivitylog.ActionOrganizationCreated,
+			Summary:        &orgSummary,
+			Metadata: map[string]any{
+				"slug": org.Slug,
+			},
+		}); err != nil {
+			return err
+		}
+
+		memberSummary := "Created organization membership"
+		if _, err := repo.CreateActivityLog(ctx, CreateActivityLogParams{
+			OrganizationID: org.ID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeMembership),
+			EntityID:       membership.ID,
+			Action:         domainactivitylog.ActionMembershipCreated,
+			Summary:        &memberSummary,
+			Metadata: map[string]any{
+				"user_id": input.CurrentUser.String(),
+				"role":    string(membership.Role),
+				"status":  string(membership.Status),
+			},
+		}); err != nil {
+			return err
+		}
+
 		result = CreatedOrganization{
 			Organization: org,
 			Membership:   membership,
@@ -245,12 +281,36 @@ func (s Service) Update(ctx context.Context, input UpdateInput) (OrganizationDet
 		return OrganizationDetails{}, ErrInvalidOrganization
 	}
 
-	updated, err := s.repo.UpdateOrganization(ctx, UpdateOrganizationParams{
-		ID:   input.OrganizationID,
-		Name: name,
-		Slug: slug,
-	})
-	if err != nil {
+	var updated domainorganization.Organization
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		next, err := repo.UpdateOrganization(ctx, UpdateOrganizationParams{
+			ID:   input.OrganizationID,
+			Name: name,
+			Slug: slug,
+		})
+		if err != nil {
+			return err
+		}
+
+		summary := "Updated organization details"
+		if _, err := repo.CreateActivityLog(ctx, CreateActivityLogParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeOrganization),
+			EntityID:       input.OrganizationID,
+			Action:         domainactivitylog.ActionOrganizationUpdated,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"name": next.Name,
+				"slug": next.Slug,
+			},
+		}); err != nil {
+			return err
+		}
+
+		updated = next
+		return nil
+	}); err != nil {
 		return OrganizationDetails{}, fmt.Errorf("update organization: %w", err)
 	}
 
@@ -311,14 +371,39 @@ func (s Service) AddMembership(ctx context.Context, input AddMembershipInput) (O
 		return OrganizationMember{}, err
 	}
 
-	created, err := s.repo.CreateMembership(ctx, CreateMembershipParams{
-		OrganizationID:  input.OrganizationID,
-		UserID:          user.ID,
-		Role:            input.Role,
-		Status:          status,
-		CreatedByUserID: input.CurrentUser,
-	})
-	if err != nil {
+	var created domainorganization.Membership
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		membership, err := repo.CreateMembership(ctx, CreateMembershipParams{
+			OrganizationID:  input.OrganizationID,
+			UserID:          user.ID,
+			Role:            input.Role,
+			Status:          status,
+			CreatedByUserID: input.CurrentUser,
+		})
+		if err != nil {
+			return err
+		}
+
+		summary := "Created organization membership"
+		if _, err := repo.CreateActivityLog(ctx, CreateActivityLogParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeMembership),
+			EntityID:       membership.ID,
+			Action:         domainactivitylog.ActionMembershipCreated,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"user_id": user.ID.String(),
+				"role":    string(membership.Role),
+				"status":  string(membership.Status),
+			},
+		}); err != nil {
+			return err
+		}
+
+		created = membership
+		return nil
+	}); err != nil {
 		return OrganizationMember{}, fmt.Errorf("create membership: %w", err)
 	}
 
@@ -356,30 +441,59 @@ func (s Service) UpdateMembership(ctx context.Context, input UpdateMembershipInp
 	}
 
 	updated := targetMembership
-	if input.Role != nil {
-		if !isValidRole(*input.Role) {
-			return OrganizationMember{}, ErrInvalidMembership
-		}
-		if *input.Role == domainorganization.MembershipRoleOwner && managerMembership.Role != domainorganization.MembershipRoleOwner {
-			return OrganizationMember{}, ErrForbiddenOrganization
-		}
-		if updated.Role != *input.Role {
-			updated, err = s.repo.UpdateMembershipRole(ctx, input.OrganizationID, input.TargetUserID, *input.Role)
-			if err != nil {
-				return OrganizationMember{}, fmt.Errorf("update membership role: %w", err)
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		var err error
+		if input.Role != nil {
+			if !isValidRole(*input.Role) {
+				return ErrInvalidMembership
+			}
+			if *input.Role == domainorganization.MembershipRoleOwner && managerMembership.Role != domainorganization.MembershipRoleOwner {
+				return ErrForbiddenOrganization
+			}
+			if updated.Role != *input.Role {
+				updated, err = repo.UpdateMembershipRole(ctx, input.OrganizationID, input.TargetUserID, *input.Role)
+				if err != nil {
+					return fmt.Errorf("update membership role: %w", err)
+				}
 			}
 		}
-	}
 
-	if input.Status != nil {
-		if !isValidStatus(*input.Status) {
-			return OrganizationMember{}, ErrInvalidMembership
-		}
-		if updated.Status != *input.Status {
-			updated, err = s.repo.UpdateMembershipStatus(ctx, input.OrganizationID, input.TargetUserID, *input.Status)
-			if err != nil {
-				return OrganizationMember{}, fmt.Errorf("update membership status: %w", err)
+		if input.Status != nil {
+			if !isValidStatus(*input.Status) {
+				return ErrInvalidMembership
 			}
+			if updated.Status != *input.Status {
+				updated, err = repo.UpdateMembershipStatus(ctx, input.OrganizationID, input.TargetUserID, *input.Status)
+				if err != nil {
+					return fmt.Errorf("update membership status: %w", err)
+				}
+			}
+		}
+
+		summary := "Updated organization membership"
+		if _, err := repo.CreateActivityLog(ctx, CreateActivityLogParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeMembership),
+			EntityID:       updated.ID,
+			Action:         domainactivitylog.ActionMembershipUpdated,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"user_id": updated.UserID.String(),
+				"role":    string(updated.Role),
+				"status":  string(updated.Status),
+			},
+		}); err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidMembership), errors.Is(err, ErrForbiddenOrganization):
+			return OrganizationMember{}, err
+		default:
+			return OrganizationMember{}, err
 		}
 	}
 
@@ -440,6 +554,54 @@ func (s Service) TransferOwnership(ctx context.Context, input TransferOwnershipI
 
 		updatedCurrent, err = repo.UpdateMembershipRole(ctx, input.OrganizationID, input.CurrentUser, newRole)
 		if err != nil {
+			return err
+		}
+
+		orgSummary := "Transferred organization ownership"
+		if _, err := repo.CreateActivityLog(ctx, CreateActivityLogParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeOrganization),
+			EntityID:       input.OrganizationID,
+			Action:         domainactivitylog.ActionOrganizationOwnershipMoved,
+			Summary:        &orgSummary,
+			Metadata: map[string]any{
+				"previous_owner_user_id": input.CurrentUser.String(),
+				"new_owner_user_id":      input.TargetUserID.String(),
+			},
+		}); err != nil {
+			return err
+		}
+
+		grantSummary := "Granted organization ownership"
+		if _, err := repo.CreateActivityLog(ctx, CreateActivityLogParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeMembership),
+			EntityID:       updatedTarget.ID,
+			Action:         domainactivitylog.ActionMembershipOwnershipGranted,
+			Summary:        &grantSummary,
+			Metadata: map[string]any{
+				"user_id": input.TargetUserID.String(),
+				"role":    string(updatedTarget.Role),
+			},
+		}); err != nil {
+			return err
+		}
+
+		revokeSummary := "Revoked organization ownership"
+		if _, err := repo.CreateActivityLog(ctx, CreateActivityLogParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeMembership),
+			EntityID:       updatedCurrent.ID,
+			Action:         domainactivitylog.ActionMembershipOwnershipRevoked,
+			Summary:        &revokeSummary,
+			Metadata: map[string]any{
+				"user_id":  input.CurrentUser.String(),
+				"new_role": string(updatedCurrent.Role),
+			},
+		}); err != nil {
 			return err
 		}
 

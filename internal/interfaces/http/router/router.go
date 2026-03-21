@@ -64,20 +64,46 @@ type RFQRoutes interface {
 	RemoveVendor(http.ResponseWriter, *http.Request)
 }
 
+type QuotationRoutes interface {
+	Create(http.ResponseWriter, *http.Request)
+	List(http.ResponseWriter, *http.Request)
+	Get(http.ResponseWriter, *http.Request)
+	Update(http.ResponseWriter, *http.Request)
+	Submit(http.ResponseWriter, *http.Request)
+	Reject(http.ResponseWriter, *http.Request)
+	ListItems(http.ResponseWriter, *http.Request)
+	UpdateItem(http.ResponseWriter, *http.Request)
+}
+
+type AwardRoutes interface {
+	Create(http.ResponseWriter, *http.Request)
+	Get(http.ResponseWriter, *http.Request)
+}
+
+type ActivityLogRoutes interface {
+	ListByEntity(http.ResponseWriter, *http.Request)
+}
+
 func New(
 	healthHandler http.Handler,
 	authHandler AuthRoutes,
 	organizationHandler OrganizationRoutes,
 	vendorHandler VendorRoutes,
 	procurementHandler ProcurementRoutes,
+	quotationHandler QuotationRoutes,
+	awardHandler AwardRoutes,
+	activityLogHandler ActivityLogRoutes,
 	rfqHandler RFQRoutes,
 	authMiddleware func(http.Handler) http.Handler,
 	tenantHeader string,
 ) http.Handler {
 	r := chi.NewRouter()
+	r.Use(httpmiddleware.WithRequestID)
 	r.Use(func(next http.Handler) http.Handler {
 		return httpmiddleware.WithTenant(next, tenantHeader)
 	})
+	r.Use(httpmiddleware.AccessLog)
+	r.Use(httpmiddleware.Recover)
 	r.Get("/openapi.yaml", apidocs.SpecHandler().ServeHTTP)
 	r.Get("/swagger", apidocs.SwaggerUIHandler("/openapi.yaml").ServeHTTP)
 	r.Get("/healthz", healthHandler.ServeHTTP)
@@ -101,6 +127,9 @@ func New(
 					r.Get("/", organizationHandler.Get)
 					r.Patch("/", organizationHandler.Update)
 					r.Post("/ownership-transfer", organizationHandler.TransferOwnership)
+					r.Route("/activity-logs", func(r chi.Router) {
+						r.Get("/", activityLogHandler.ListByEntity)
+					})
 					r.Route("/approvals", func(r chi.Router) {
 						r.Route("/procurement-requests", func(r chi.Router) {
 							r.Get("/", procurementHandler.ListApprovalInbox)
@@ -157,6 +186,24 @@ func New(
 								r.Get("/", rfqHandler.ListVendors)
 								r.Post("/", rfqHandler.AttachVendor)
 								r.Delete("/{vendorID}", rfqHandler.RemoveVendor)
+							})
+							r.Route("/quotations", func(r chi.Router) {
+								r.Get("/", quotationHandler.List)
+								r.Post("/", quotationHandler.Create)
+								r.Route("/{quotationID}", func(r chi.Router) {
+									r.Get("/", quotationHandler.Get)
+									r.Patch("/", quotationHandler.Update)
+									r.Post("/submit", quotationHandler.Submit)
+									r.Post("/reject", quotationHandler.Reject)
+									r.Route("/items", func(r chi.Router) {
+										r.Get("/", quotationHandler.ListItems)
+										r.Patch("/{itemID}", quotationHandler.UpdateItem)
+									})
+								})
+							})
+							r.Route("/award", func(r chi.Router) {
+								r.Get("/", awardHandler.Get)
+								r.Post("/", awardHandler.Create)
 							})
 						})
 					})

@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 
+	applicationactivitylog "github.com/AbenezerWork/ProcureFlow/internal/application/activitylog"
 	applicationprocurement "github.com/AbenezerWork/ProcureFlow/internal/application/procurement"
+	domainactivitylog "github.com/AbenezerWork/ProcureFlow/internal/domain/activitylog"
 	domainorganization "github.com/AbenezerWork/ProcureFlow/internal/domain/organization"
 	domainprocurement "github.com/AbenezerWork/ProcureFlow/internal/domain/procurement"
 	"github.com/AbenezerWork/ProcureFlow/internal/infrastructure/database"
@@ -15,10 +17,11 @@ import (
 
 type ProcurementRepository struct {
 	store *database.Store
+	hooks []applicationactivitylog.Hook
 }
 
-func NewProcurementRepository(store *database.Store) *ProcurementRepository {
-	return &ProcurementRepository{store: store}
+func NewProcurementRepository(store *database.Store, hooks ...applicationactivitylog.Hook) *ProcurementRepository {
+	return &ProcurementRepository{store: store, hooks: hooks}
 }
 
 func (r *ProcurementRepository) CreateRequest(ctx context.Context, params applicationprocurement.CreateRequestParams) (domainprocurement.Request, error) {
@@ -308,6 +311,16 @@ func (r *ProcurementRepository) GetMembership(ctx context.Context, organizationI
 	}
 
 	return mapMembership(membership), nil
+}
+
+func (r *ProcurementRepository) CreateActivityLog(ctx context.Context, params applicationactivitylog.CreateParams) (domainactivitylog.Entry, error) {
+	return createActivityLog(ctx, r.store, params, r.hooks...)
+}
+
+func (r *ProcurementRepository) WithinTransaction(ctx context.Context, fn func(repo applicationprocurement.Repository) error) error {
+	return r.store.InTx(ctx, func(txStore *database.Store) error {
+		return fn(NewProcurementRepository(txStore, r.hooks...))
+	})
 }
 
 func mapProcurementRequest(request sqlc.ProcurementRequest) domainprocurement.Request {

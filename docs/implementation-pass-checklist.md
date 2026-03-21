@@ -109,41 +109,41 @@ Database schema, raw SQL, or generated `sqlc` code alone do not count as a compl
 
 ## Partial Groundwork Present But Not Delivered End To End
 
-- [ ] Quotation tables, SQL, and generated `sqlc` code exist, but there is no delivered quotation domain, application service, repository wiring, HTTP surface, or test coverage
-- [ ] Award tables, SQL, and generated `sqlc` code exist, but there is no delivered award domain, application service, repository wiring, HTTP surface, or test coverage
-- [ ] Activity log tables, SQL, and generated `sqlc` code exist, but implemented application flows do not yet write or expose activity logs as a deliverable timeline feature
+- [x] Quotation tables, SQL, and generated `sqlc` code exist, and the quotation domain, application service, repository wiring, HTTP surface, and focused test coverage are now delivered
+- [x] Award tables, SQL, and generated `sqlc` code exist, and the award domain, application service, repository wiring, HTTP surface, and focused test coverage are now delivered
+- [x] Activity log tables, SQL, generated `sqlc` code, transactional workflow writes, and an entity-scoped read endpoint are now wired as a deliverable timeline feature
 
 ## Remaining Deliverables For A Fuller Phase 1 Pass
 
 ### Quotations
 
-- [ ] Add quotation domain models and application-service rules
-- [ ] Implement repository wiring for quotation create, list, get, update, submit, reject, and item pricing flows
-- [ ] Expose quotation HTTP handlers, routes, request validation, and OpenAPI documentation
-- [ ] Define quotation authorization rules across buyer and vendor-facing operations
-- [ ] Add automated tests for quotation lifecycle transitions and access control
-- [ ] Add manual API guide coverage for quotation flows
+- [x] Add quotation domain models and application-service rules
+- [x] Implement repository wiring for quotation create, list, get, update, submit, reject, and item pricing flows
+- [x] Expose quotation HTTP handlers, routes, request validation, and OpenAPI documentation
+- [x] Define quotation authorization rules across buyer and vendor-facing operations
+- [x] Add automated tests for quotation lifecycle transitions and access control
+- [x] Add manual API guide coverage for quotation flows
 
 ### Awards
 
-- [ ] Add award domain models and application-service rules
-- [ ] Implement repository wiring for award decision creation and award lookup
-- [ ] Expose award HTTP handlers, routes, request validation, and OpenAPI documentation
-- [ ] Enforce RFQ-to-award rules so only eligible quotations can be awarded
-- [ ] Add automated tests for award authorization and lifecycle behavior
-- [ ] Add manual API guide coverage for award flows
+- [x] Add award domain models and application-service rules
+- [x] Implement repository wiring for award decision creation and award lookup
+- [x] Expose award HTTP handlers, routes, request validation, and OpenAPI documentation
+- [x] Enforce RFQ-to-award rules so only eligible quotations can be awarded
+- [x] Add automated tests for award authorization and lifecycle behavior
+- [x] Add manual API guide coverage for award flows
 
 ### Activity Logs
 
-- [ ] Write activity logs transactionally for major workflow actions
-- [ ] Define a stable event taxonomy for procurement requests, RFQs, quotations, awards, organizations, and memberships
-- [ ] Expose activity log query/read models needed for timeline rendering
-- [ ] Add automated verification that activity log writes occur on the intended workflows
+- [x] Write activity logs transactionally for major workflow actions
+- [x] Define a stable event taxonomy for procurement requests, RFQs, quotations, awards, organizations, and memberships
+- [x] Expose activity log query/read models needed for timeline rendering
+- [x] Add automated verification that activity log writes occur on the intended workflows
 
 ### Workflow Completeness
 
-- [ ] Add workflow-transition enforcement for quotation lifecycle states
-- [ ] Add workflow-transition enforcement for award lifecycle states
+- [x] Add workflow-transition enforcement for quotation lifecycle states
+- [x] Add workflow-transition enforcement for award lifecycle states
 - [ ] Verify cross-slice transitions from approved procurement request to RFQ to quotation to award
 
 ### Verification Depth

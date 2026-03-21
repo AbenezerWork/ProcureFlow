@@ -191,6 +191,56 @@ func (stubRFQHandler) RemoveVendor(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+type stubQuotationHandler struct{}
+
+func (stubQuotationHandler) Create(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (stubQuotationHandler) List(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func (stubQuotationHandler) Get(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func (stubQuotationHandler) Update(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func (stubQuotationHandler) Submit(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func (stubQuotationHandler) Reject(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func (stubQuotationHandler) ListItems(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func (stubQuotationHandler) UpdateItem(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+type stubAwardHandler struct{}
+
+func (stubAwardHandler) Create(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (stubAwardHandler) Get(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+type stubActivityLogHandler struct{}
+
+func (stubActivityLogHandler) ListByEntity(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
 type fakeTokenVerifier struct {
 	verifyFn func(string) (domainidentity.Claims, error)
 }
@@ -204,7 +254,7 @@ func TestNewRoutesHealthCheck(t *testing.T) {
 
 	router := New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	}), stubAuthHandler{}, stubOrganizationHandler{}, stubVendorHandler{}, stubProcurementHandler{}, stubRFQHandler{}, func(next http.Handler) http.Handler {
+	}), stubAuthHandler{}, stubOrganizationHandler{}, stubVendorHandler{}, stubProcurementHandler{}, stubQuotationHandler{}, stubAwardHandler{}, stubActivityLogHandler{}, stubRFQHandler{}, func(next http.Handler) http.Handler {
 		return next
 	}, "X-Tenant-ID")
 
@@ -223,7 +273,7 @@ func TestNewRoutesOpenAPISpec(t *testing.T) {
 
 	router := New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	}), stubAuthHandler{}, stubOrganizationHandler{}, stubVendorHandler{}, stubProcurementHandler{}, stubRFQHandler{}, func(next http.Handler) http.Handler {
+	}), stubAuthHandler{}, stubOrganizationHandler{}, stubVendorHandler{}, stubProcurementHandler{}, stubQuotationHandler{}, stubAwardHandler{}, stubActivityLogHandler{}, stubRFQHandler{}, func(next http.Handler) http.Handler {
 		return next
 	}, "X-Tenant-ID")
 
@@ -246,7 +296,7 @@ func TestNewRoutesSwaggerUI(t *testing.T) {
 
 	router := New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	}), stubAuthHandler{}, stubOrganizationHandler{}, stubVendorHandler{}, stubProcurementHandler{}, stubRFQHandler{}, func(next http.Handler) http.Handler {
+	}), stubAuthHandler{}, stubOrganizationHandler{}, stubVendorHandler{}, stubProcurementHandler{}, stubQuotationHandler{}, stubAwardHandler{}, stubActivityLogHandler{}, stubRFQHandler{}, func(next http.Handler) http.Handler {
 		return next
 	}, "X-Tenant-ID")
 
@@ -278,7 +328,7 @@ func TestNewAppliesTenantMiddleware(t *testing.T) {
 		}
 
 		w.WriteHeader(http.StatusNoContent)
-	}), stubAuthHandler{}, stubOrganizationHandler{}, stubVendorHandler{}, stubProcurementHandler{}, stubRFQHandler{}, func(next http.Handler) http.Handler {
+	}), stubAuthHandler{}, stubOrganizationHandler{}, stubVendorHandler{}, stubProcurementHandler{}, stubQuotationHandler{}, stubAwardHandler{}, stubActivityLogHandler{}, stubRFQHandler{}, func(next http.Handler) http.Handler {
 		return next
 	}, "X-Tenant-ID")
 
@@ -306,7 +356,7 @@ func TestNewProtectsAuthenticatedRoutes(t *testing.T) {
 
 			w.WriteHeader(http.StatusOK)
 		},
-	}, stubOrganizationHandler{}, stubVendorHandler{}, stubProcurementHandler{}, stubRFQHandler{}, httpmiddleware.RequireAuthentication(fakeTokenVerifier{
+	}, stubOrganizationHandler{}, stubVendorHandler{}, stubProcurementHandler{}, stubQuotationHandler{}, stubAwardHandler{}, stubActivityLogHandler{}, stubRFQHandler{}, httpmiddleware.RequireAuthentication(fakeTokenVerifier{
 		verifyFn: func(token string) (domainidentity.Claims, error) {
 			if token != "token" {
 				t.Fatalf("unexpected token: %s", token)
@@ -332,7 +382,7 @@ func TestNewRejectsMissingBearerToken(t *testing.T) {
 
 	router := New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	}), stubAuthHandler{}, stubOrganizationHandler{}, stubVendorHandler{}, stubProcurementHandler{}, stubRFQHandler{}, httpmiddleware.RequireAuthentication(fakeTokenVerifier{
+	}), stubAuthHandler{}, stubOrganizationHandler{}, stubVendorHandler{}, stubProcurementHandler{}, stubQuotationHandler{}, stubAwardHandler{}, stubActivityLogHandler{}, stubRFQHandler{}, httpmiddleware.RequireAuthentication(fakeTokenVerifier{
 		verifyFn: func(string) (domainidentity.Claims, error) {
 			return domainidentity.Claims{UserID: uuid.New()}, nil
 		},

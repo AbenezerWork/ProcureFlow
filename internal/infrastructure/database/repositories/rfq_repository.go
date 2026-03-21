@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 
+	applicationactivitylog "github.com/AbenezerWork/ProcureFlow/internal/application/activitylog"
 	applicationrfq "github.com/AbenezerWork/ProcureFlow/internal/application/rfq"
+	domainactivitylog "github.com/AbenezerWork/ProcureFlow/internal/domain/activitylog"
 	domainorganization "github.com/AbenezerWork/ProcureFlow/internal/domain/organization"
 	domainprocurement "github.com/AbenezerWork/ProcureFlow/internal/domain/procurement"
 	domainrfq "github.com/AbenezerWork/ProcureFlow/internal/domain/rfq"
@@ -18,10 +20,11 @@ import (
 
 type RFQRepository struct {
 	store *database.Store
+	hooks []applicationactivitylog.Hook
 }
 
-func NewRFQRepository(store *database.Store) *RFQRepository {
-	return &RFQRepository{store: store}
+func NewRFQRepository(store *database.Store, hooks ...applicationactivitylog.Hook) *RFQRepository {
+	return &RFQRepository{store: store, hooks: hooks}
 }
 
 func (r *RFQRepository) CreateRFQ(ctx context.Context, params applicationrfq.CreateRFQParams) (domainrfq.RFQ, error) {
@@ -344,9 +347,13 @@ func (r *RFQRepository) GetVendor(ctx context.Context, organizationID, vendorID 
 	return mapVendor(vendor), nil
 }
 
+func (r *RFQRepository) CreateActivityLog(ctx context.Context, params applicationactivitylog.CreateParams) (domainactivitylog.Entry, error) {
+	return createActivityLog(ctx, r.store, params, r.hooks...)
+}
+
 func (r *RFQRepository) WithinTransaction(ctx context.Context, fn func(repo applicationrfq.Repository) error) error {
 	return r.store.InTx(ctx, func(txStore *database.Store) error {
-		return fn(NewRFQRepository(txStore))
+		return fn(NewRFQRepository(txStore, r.hooks...))
 	})
 }
 

@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	applicationactivitylog "github.com/AbenezerWork/ProcureFlow/internal/application/activitylog"
+	applicationaward "github.com/AbenezerWork/ProcureFlow/internal/application/award"
 	applicationhealth "github.com/AbenezerWork/ProcureFlow/internal/application/health"
 	applicationidentity "github.com/AbenezerWork/ProcureFlow/internal/application/identity"
 	applicationorganization "github.com/AbenezerWork/ProcureFlow/internal/application/organization"
 	applicationprocurement "github.com/AbenezerWork/ProcureFlow/internal/application/procurement"
+	applicationquotation "github.com/AbenezerWork/ProcureFlow/internal/application/quotation"
 	applicationrfq "github.com/AbenezerWork/ProcureFlow/internal/application/rfq"
 	applicationvendor "github.com/AbenezerWork/ProcureFlow/internal/application/vendor"
 	authinfra "github.com/AbenezerWork/ProcureFlow/internal/infrastructure/auth"
@@ -35,21 +38,30 @@ func New(ctx context.Context, cfg config.Config, version string) (*App, error) {
 	store := database.NewStore(pool)
 	passwordHasher := authinfra.NewPasswordHasher()
 	tokenManager := authinfra.NewTokenManager(cfg.Auth)
+	activityLogRepository := dbrepositories.NewActivityLogRepository(store)
 	identityRepository := dbrepositories.NewIdentityRepository(store)
 	organizationRepository := dbrepositories.NewOrganizationRepository(store)
 	procurementRepository := dbrepositories.NewProcurementRepository(store)
+	awardRepository := dbrepositories.NewAwardRepository(store)
+	quotationRepository := dbrepositories.NewQuotationRepository(store)
 	rfqRepository := dbrepositories.NewRFQRepository(store)
 	vendorRepository := dbrepositories.NewVendorRepository(store)
+	activityLogService := applicationactivitylog.NewService(activityLogRepository)
 	healthService := applicationhealth.NewService(cfg.AppName, cfg.Environment, version)
+	awardService := applicationaward.NewService(awardRepository, awardRepository)
 	identityService := applicationidentity.NewService(identityRepository, passwordHasher, tokenManager)
 	organizationService := applicationorganization.NewService(organizationRepository, organizationRepository, identityRepository)
-	procurementService := applicationprocurement.NewService(procurementRepository)
+	procurementService := applicationprocurement.NewService(procurementRepository, procurementRepository)
+	quotationService := applicationquotation.NewService(quotationRepository, quotationRepository)
 	rfqService := applicationrfq.NewService(rfqRepository, rfqRepository)
-	vendorService := applicationvendor.NewService(vendorRepository)
+	vendorService := applicationvendor.NewService(vendorRepository, vendorRepository)
+	activityLogHandler := handlers.NewActivityLogHandler(activityLogService)
 	healthHandler := handlers.NewHealthHandler(healthService, httpmiddleware.TenantFromContext)
+	awardHandler := handlers.NewAwardHandler(awardService)
 	authHandler := handlers.NewAuthHandler(identityService)
 	organizationHandler := handlers.NewOrganizationHandler(organizationService)
 	procurementHandler := handlers.NewProcurementHandler(procurementService)
+	quotationHandler := handlers.NewQuotationHandler(quotationService)
 	rfqHandler := handlers.NewRFQHandler(rfqService)
 	vendorHandler := handlers.NewVendorHandler(vendorService)
 	router := httprouter.New(
@@ -58,6 +70,9 @@ func New(ctx context.Context, cfg config.Config, version string) (*App, error) {
 		organizationHandler,
 		vendorHandler,
 		procurementHandler,
+		quotationHandler,
+		awardHandler,
+		activityLogHandler,
 		rfqHandler,
 		httpmiddleware.RequireAuthentication(identityService),
 		cfg.TenantHeader,

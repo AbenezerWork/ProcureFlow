@@ -6,19 +6,22 @@ import (
 	"testing"
 	"time"
 
+	applicationactivitylog "github.com/AbenezerWork/ProcureFlow/internal/application/activitylog"
+	domainactivitylog "github.com/AbenezerWork/ProcureFlow/internal/domain/activitylog"
 	domainorganization "github.com/AbenezerWork/ProcureFlow/internal/domain/organization"
 	domainvendor "github.com/AbenezerWork/ProcureFlow/internal/domain/vendor"
 	"github.com/google/uuid"
 )
 
 type fakeRepository struct {
-	createVendorFn  func(context.Context, CreateVendorParams) (domainvendor.Vendor, error)
-	getVendorFn     func(context.Context, uuid.UUID, uuid.UUID) (domainvendor.Vendor, error)
-	listVendorsFn   func(context.Context, uuid.UUID, *domainvendor.Status) ([]domainvendor.Vendor, error)
-	searchVendorsFn func(context.Context, uuid.UUID, string) ([]domainvendor.Vendor, error)
-	updateVendorFn  func(context.Context, UpdateVendorParams) (domainvendor.Vendor, error)
-	archiveVendorFn func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (domainvendor.Vendor, error)
-	getMembershipFn func(context.Context, uuid.UUID, uuid.UUID) (domainorganization.Membership, error)
+	createVendorFn      func(context.Context, CreateVendorParams) (domainvendor.Vendor, error)
+	getVendorFn         func(context.Context, uuid.UUID, uuid.UUID) (domainvendor.Vendor, error)
+	listVendorsFn       func(context.Context, uuid.UUID, *domainvendor.Status) ([]domainvendor.Vendor, error)
+	searchVendorsFn     func(context.Context, uuid.UUID, string) ([]domainvendor.Vendor, error)
+	updateVendorFn      func(context.Context, UpdateVendorParams) (domainvendor.Vendor, error)
+	archiveVendorFn     func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (domainvendor.Vendor, error)
+	getMembershipFn     func(context.Context, uuid.UUID, uuid.UUID) (domainorganization.Membership, error)
+	createActivityLogFn func(context.Context, applicationactivitylog.CreateParams) (domainactivitylog.Entry, error)
 }
 
 func (f fakeRepository) CreateVendor(ctx context.Context, params CreateVendorParams) (domainvendor.Vendor, error) {
@@ -49,12 +52,36 @@ func (f fakeRepository) GetMembership(ctx context.Context, organizationID, userI
 	return f.getMembershipFn(ctx, organizationID, userID)
 }
 
+func (f fakeRepository) CreateActivityLog(ctx context.Context, params applicationactivitylog.CreateParams) (domainactivitylog.Entry, error) {
+	if f.createActivityLogFn == nil {
+		return domainactivitylog.Entry{}, nil
+	}
+	return f.createActivityLogFn(ctx, params)
+}
+
+type fakeTxManager struct {
+	withinFn func(context.Context, func(Repository) error) error
+}
+
+func (f fakeTxManager) WithinTransaction(ctx context.Context, fn func(Repository) error) error {
+	return f.withinFn(ctx, fn)
+}
+
+func passthroughTx(repo Repository) fakeTxManager {
+	return fakeTxManager{
+		withinFn: func(ctx context.Context, fn func(Repository) error) error {
+			return fn(repo)
+		},
+	}
+}
+
 func TestServiceCreateVendor(t *testing.T) {
 	t.Parallel()
 
 	orgID := uuid.New()
 	userID := uuid.New()
 	now := time.Now().UTC()
+	logged := false
 	repo := fakeRepository{
 		getMembershipFn: func(_ context.Context, gotOrgID, gotUserID uuid.UUID) (domainorganization.Membership, error) {
 			if gotOrgID != orgID || gotUserID != userID {
@@ -88,9 +115,16 @@ func TestServiceCreateVendor(t *testing.T) {
 				UpdatedAt:       now,
 			}, nil
 		},
+		createActivityLogFn: func(_ context.Context, params applicationactivitylog.CreateParams) (domainactivitylog.Entry, error) {
+			logged = true
+			if params.EntityType != string(domainactivitylog.EntityTypeVendor) || params.Action != domainactivitylog.ActionVendorCreated {
+				t.Fatalf("unexpected activity log payload: %#v", params)
+			}
+			return domainactivitylog.Entry{EntityID: params.EntityID, Action: params.Action}, nil
+		},
 	}
 
-	service := NewService(repo)
+	service := NewService(repo, passthroughTx(repo))
 	created, err := service.Create(context.Background(), CreateInput{
 		OrganizationID: orgID,
 		CurrentUser:    userID,
@@ -102,6 +136,9 @@ func TestServiceCreateVendor(t *testing.T) {
 
 	if created.Name != "Acme Supplies" {
 		t.Fatalf("expected normalized name, got %q", created.Name)
+	}
+	if !logged {
+		t.Fatalf("expected vendor activity log to be written")
 	}
 }
 
@@ -121,7 +158,7 @@ func TestServiceCreateVendorRejectsUnauthorizedRole(t *testing.T) {
 		},
 	}
 
-	service := NewService(repo)
+	service := NewService(repo, passthroughTx(repo))
 	_, err := service.Create(context.Background(), CreateInput{
 		OrganizationID: uuid.New(),
 		CurrentUser:    uuid.New(),
@@ -158,7 +195,7 @@ func TestServiceListSearchFiltersByStatus(t *testing.T) {
 		},
 	}
 
-	service := NewService(repo)
+	service := NewService(repo, passthroughTx(repo))
 	status := domainvendor.StatusActive
 	vendors, err := service.List(context.Background(), ListInput{
 		OrganizationID: orgID,
@@ -221,7 +258,7 @@ func TestServiceUpdateMergesOptionalFields(t *testing.T) {
 		},
 	}
 
-	service := NewService(repo)
+	service := NewService(repo, passthroughTx(repo))
 	name := "Acme Updated"
 	updated, err := service.Update(context.Background(), UpdateInput{
 		OrganizationID: orgID,
@@ -272,7 +309,7 @@ func TestServiceArchiveVendor(t *testing.T) {
 		},
 	}
 
-	service := NewService(repo)
+	service := NewService(repo, passthroughTx(repo))
 	archived, err := service.Archive(context.Background(), ArchiveInput{
 		OrganizationID: orgID,
 		VendorID:       vendorID,

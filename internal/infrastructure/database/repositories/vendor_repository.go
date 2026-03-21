@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 
+	applicationactivitylog "github.com/AbenezerWork/ProcureFlow/internal/application/activitylog"
 	applicationvendor "github.com/AbenezerWork/ProcureFlow/internal/application/vendor"
+	domainactivitylog "github.com/AbenezerWork/ProcureFlow/internal/domain/activitylog"
 	domainorganization "github.com/AbenezerWork/ProcureFlow/internal/domain/organization"
 	domainvendor "github.com/AbenezerWork/ProcureFlow/internal/domain/vendor"
 	"github.com/AbenezerWork/ProcureFlow/internal/infrastructure/database"
@@ -15,10 +17,11 @@ import (
 
 type VendorRepository struct {
 	store *database.Store
+	hooks []applicationactivitylog.Hook
 }
 
-func NewVendorRepository(store *database.Store) *VendorRepository {
-	return &VendorRepository{store: store}
+func NewVendorRepository(store *database.Store, hooks ...applicationactivitylog.Hook) *VendorRepository {
+	return &VendorRepository{store: store, hooks: hooks}
 }
 
 func (r *VendorRepository) CreateVendor(ctx context.Context, params applicationvendor.CreateVendorParams) (domainvendor.Vendor, error) {
@@ -155,6 +158,16 @@ func (r *VendorRepository) GetMembership(ctx context.Context, organizationID, us
 	}
 
 	return mapMembership(membership), nil
+}
+
+func (r *VendorRepository) CreateActivityLog(ctx context.Context, params applicationactivitylog.CreateParams) (domainactivitylog.Entry, error) {
+	return createActivityLog(ctx, r.store, params, r.hooks...)
+}
+
+func (r *VendorRepository) WithinTransaction(ctx context.Context, fn func(repo applicationvendor.Repository) error) error {
+	return r.store.InTx(ctx, func(txStore *database.Store) error {
+		return fn(NewVendorRepository(txStore, r.hooks...))
+	})
 }
 
 func mapVendor(vendor sqlc.Vendor) domainvendor.Vendor {

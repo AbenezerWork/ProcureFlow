@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	applicationactivitylog "github.com/AbenezerWork/ProcureFlow/internal/application/activitylog"
+	domainactivitylog "github.com/AbenezerWork/ProcureFlow/internal/domain/activitylog"
 	domainorganization "github.com/AbenezerWork/ProcureFlow/internal/domain/organization"
 	domainvendor "github.com/AbenezerWork/ProcureFlow/internal/domain/vendor"
 	"github.com/google/uuid"
@@ -63,6 +65,11 @@ type Repository interface {
 	UpdateVendor(ctx context.Context, params UpdateVendorParams) (domainvendor.Vendor, error)
 	ArchiveVendor(ctx context.Context, organizationID, vendorID, updatedByUserID uuid.UUID) (domainvendor.Vendor, error)
 	GetMembership(ctx context.Context, organizationID, userID uuid.UUID) (domainorganization.Membership, error)
+	CreateActivityLog(ctx context.Context, params applicationactivitylog.CreateParams) (domainactivitylog.Entry, error)
+}
+
+type TransactionManager interface {
+	WithinTransaction(ctx context.Context, fn func(repo Repository) error) error
 }
 
 type CreateInput struct {
@@ -117,10 +124,11 @@ type ArchiveInput struct {
 
 type Service struct {
 	repo Repository
+	tx   TransactionManager
 }
 
-func NewService(repo Repository) Service {
-	return Service{repo: repo}
+func NewService(repo Repository, tx TransactionManager) Service {
+	return Service{repo: repo, tx: tx}
 }
 
 func (s Service) Create(ctx context.Context, input CreateInput) (domainvendor.Vendor, error) {
@@ -141,24 +149,47 @@ func (s Service) Create(ctx context.Context, input CreateInput) (domainvendor.Ve
 		return domainvendor.Vendor{}, ErrInvalidVendor
 	}
 
-	created, err := s.repo.CreateVendor(ctx, CreateVendorParams{
-		OrganizationID:  input.OrganizationID,
-		Name:            name,
-		LegalName:       normalizeOptional(input.LegalName),
-		ContactName:     normalizeOptional(input.ContactName),
-		Email:           normalizeOptional(input.Email),
-		Phone:           normalizeOptional(input.Phone),
-		TaxIdentifier:   normalizeOptional(input.TaxIdentifier),
-		AddressLine1:    normalizeOptional(input.AddressLine1),
-		AddressLine2:    normalizeOptional(input.AddressLine2),
-		City:            normalizeOptional(input.City),
-		StateRegion:     normalizeOptional(input.StateRegion),
-		PostalCode:      normalizeOptional(input.PostalCode),
-		Country:         normalizeOptional(input.Country),
-		Notes:           normalizeOptional(input.Notes),
-		CreatedByUserID: input.CurrentUser,
-	})
-	if err != nil {
+	var created domainvendor.Vendor
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		vendor, err := repo.CreateVendor(ctx, CreateVendorParams{
+			OrganizationID:  input.OrganizationID,
+			Name:            name,
+			LegalName:       normalizeOptional(input.LegalName),
+			ContactName:     normalizeOptional(input.ContactName),
+			Email:           normalizeOptional(input.Email),
+			Phone:           normalizeOptional(input.Phone),
+			TaxIdentifier:   normalizeOptional(input.TaxIdentifier),
+			AddressLine1:    normalizeOptional(input.AddressLine1),
+			AddressLine2:    normalizeOptional(input.AddressLine2),
+			City:            normalizeOptional(input.City),
+			StateRegion:     normalizeOptional(input.StateRegion),
+			PostalCode:      normalizeOptional(input.PostalCode),
+			Country:         normalizeOptional(input.Country),
+			Notes:           normalizeOptional(input.Notes),
+			CreatedByUserID: input.CurrentUser,
+		})
+		if err != nil {
+			return err
+		}
+
+		summary := "Created vendor"
+		if _, err := repo.CreateActivityLog(ctx, applicationactivitylog.CreateParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeVendor),
+			EntityID:       vendor.ID,
+			Action:         domainactivitylog.ActionVendorCreated,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"vendor_name": vendor.Name,
+			},
+		}); err != nil {
+			return err
+		}
+
+		created = vendor
+		return nil
+	}); err != nil {
 		return domainvendor.Vendor{}, fmt.Errorf("create vendor: %w", err)
 	}
 
@@ -259,25 +290,48 @@ func (s Service) Update(ctx context.Context, input UpdateInput) (domainvendor.Ve
 		return domainvendor.Vendor{}, ErrInvalidVendor
 	}
 
-	updated, err := s.repo.UpdateVendor(ctx, UpdateVendorParams{
-		OrganizationID:  input.OrganizationID,
-		VendorID:        input.VendorID,
-		Name:            name,
-		LegalName:       mergeOptional(existing.LegalName, input.LegalName),
-		ContactName:     mergeOptional(existing.ContactName, input.ContactName),
-		Email:           mergeOptional(existing.Email, input.Email),
-		Phone:           mergeOptional(existing.Phone, input.Phone),
-		TaxIdentifier:   mergeOptional(existing.TaxIdentifier, input.TaxIdentifier),
-		AddressLine1:    mergeOptional(existing.AddressLine1, input.AddressLine1),
-		AddressLine2:    mergeOptional(existing.AddressLine2, input.AddressLine2),
-		City:            mergeOptional(existing.City, input.City),
-		StateRegion:     mergeOptional(existing.StateRegion, input.StateRegion),
-		PostalCode:      mergeOptional(existing.PostalCode, input.PostalCode),
-		Country:         mergeOptional(existing.Country, input.Country),
-		Notes:           mergeOptional(existing.Notes, input.Notes),
-		UpdatedByUserID: input.CurrentUser,
-	})
-	if err != nil {
+	var updated domainvendor.Vendor
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		vendor, err := repo.UpdateVendor(ctx, UpdateVendorParams{
+			OrganizationID:  input.OrganizationID,
+			VendorID:        input.VendorID,
+			Name:            name,
+			LegalName:       mergeOptional(existing.LegalName, input.LegalName),
+			ContactName:     mergeOptional(existing.ContactName, input.ContactName),
+			Email:           mergeOptional(existing.Email, input.Email),
+			Phone:           mergeOptional(existing.Phone, input.Phone),
+			TaxIdentifier:   mergeOptional(existing.TaxIdentifier, input.TaxIdentifier),
+			AddressLine1:    mergeOptional(existing.AddressLine1, input.AddressLine1),
+			AddressLine2:    mergeOptional(existing.AddressLine2, input.AddressLine2),
+			City:            mergeOptional(existing.City, input.City),
+			StateRegion:     mergeOptional(existing.StateRegion, input.StateRegion),
+			PostalCode:      mergeOptional(existing.PostalCode, input.PostalCode),
+			Country:         mergeOptional(existing.Country, input.Country),
+			Notes:           mergeOptional(existing.Notes, input.Notes),
+			UpdatedByUserID: input.CurrentUser,
+		})
+		if err != nil {
+			return err
+		}
+
+		summary := "Updated vendor"
+		if _, err := repo.CreateActivityLog(ctx, applicationactivitylog.CreateParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeVendor),
+			EntityID:       vendor.ID,
+			Action:         domainactivitylog.ActionVendorUpdated,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"vendor_name": vendor.Name,
+			},
+		}); err != nil {
+			return err
+		}
+
+		updated = vendor
+		return nil
+	}); err != nil {
 		if errors.Is(err, ErrVendorNotFound) {
 			return domainvendor.Vendor{}, err
 		}
@@ -301,8 +355,31 @@ func (s Service) Archive(ctx context.Context, input ArchiveInput) (domainvendor.
 		return domainvendor.Vendor{}, ErrForbiddenVendor
 	}
 
-	archived, err := s.repo.ArchiveVendor(ctx, input.OrganizationID, input.VendorID, input.CurrentUser)
-	if err != nil {
+	var archived domainvendor.Vendor
+	if err := s.tx.WithinTransaction(ctx, func(repo Repository) error {
+		vendor, err := repo.ArchiveVendor(ctx, input.OrganizationID, input.VendorID, input.CurrentUser)
+		if err != nil {
+			return err
+		}
+
+		summary := "Archived vendor"
+		if _, err := repo.CreateActivityLog(ctx, applicationactivitylog.CreateParams{
+			OrganizationID: input.OrganizationID,
+			ActorUserID:    &input.CurrentUser,
+			EntityType:     string(domainactivitylog.EntityTypeVendor),
+			EntityID:       vendor.ID,
+			Action:         domainactivitylog.ActionVendorArchived,
+			Summary:        &summary,
+			Metadata: map[string]any{
+				"vendor_name": vendor.Name,
+			},
+		}); err != nil {
+			return err
+		}
+
+		archived = vendor
+		return nil
+	}); err != nil {
 		if errors.Is(err, ErrVendorNotFound) {
 			return domainvendor.Vendor{}, err
 		}
