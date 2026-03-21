@@ -5,34 +5,15 @@ import (
 	"testing"
 )
 
-func TestLoadAllowsDevelopmentDefaults(t *testing.T) {
+func TestLoadRequiresJWTSecret(t *testing.T) {
 	resetConfigEnv(t)
-	t.Setenv("APP_ENV", defaultEnvironment)
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("load returned error: %v", err)
-	}
-
-	if cfg.Auth.JWTSecret != defaultJWTSecret {
-		t.Fatalf("expected default JWT secret %q, got %q", defaultJWTSecret, cfg.Auth.JWTSecret)
-	}
-
-	if cfg.Database.Password != defaultDBPassword {
-		t.Fatalf("expected default DB password %q, got %q", defaultDBPassword, cfg.Database.Password)
-	}
-}
-
-func TestLoadRejectsProductionDefaultSecret(t *testing.T) {
-	resetConfigEnv(t)
-	t.Setenv("APP_ENV", productionEnvironment)
-	t.Setenv("DB_USER", "procureflow-prod")
-	t.Setenv("DB_PASSWORD", "super-secret")
-	t.Setenv("DB_NAME", "procureflow_prod")
+	t.Setenv("DB_USER", "procureflow")
+	t.Setenv("DB_PASSWORD", "procureflow")
+	t.Setenv("DB_NAME", "procureflow")
 
 	_, err := Load()
 	if err == nil {
-		t.Fatal("expected load to fail for default production JWT secret")
+		t.Fatal("expected load to fail when AUTH_JWT_SECRET is missing")
 	}
 
 	if !strings.Contains(err.Error(), "AUTH_JWT_SECRET") {
@@ -40,14 +21,15 @@ func TestLoadRejectsProductionDefaultSecret(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsProductionDefaultDatabaseCredentials(t *testing.T) {
+func TestLoadRequiresDatabaseUser(t *testing.T) {
 	resetConfigEnv(t)
-	t.Setenv("APP_ENV", productionEnvironment)
-	t.Setenv("AUTH_JWT_SECRET", "prod-secret")
+	t.Setenv("AUTH_JWT_SECRET", "test-secret")
+	t.Setenv("DB_PASSWORD", "procureflow")
+	t.Setenv("DB_NAME", "procureflow")
 
 	_, err := Load()
 	if err == nil {
-		t.Fatal("expected load to fail for default production database credentials")
+		t.Fatal("expected load to fail when DB_USER is missing")
 	}
 
 	if !strings.Contains(err.Error(), "DB_USER") {
@@ -55,25 +37,57 @@ func TestLoadRejectsProductionDefaultDatabaseCredentials(t *testing.T) {
 	}
 }
 
-func TestLoadAcceptsProductionExplicitSensitiveConfig(t *testing.T) {
+func TestLoadRequiresDatabasePassword(t *testing.T) {
 	resetConfigEnv(t)
-	t.Setenv("APP_ENV", productionEnvironment)
-	t.Setenv("AUTH_JWT_SECRET", "prod-secret")
-	t.Setenv("DB_USER", "procureflow-prod")
-	t.Setenv("DB_PASSWORD", "super-secret")
-	t.Setenv("DB_NAME", "procureflow_prod")
+	t.Setenv("AUTH_JWT_SECRET", "test-secret")
+	t.Setenv("DB_USER", "procureflow")
+	t.Setenv("DB_NAME", "procureflow")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected load to fail when DB_PASSWORD is missing")
+	}
+
+	if !strings.Contains(err.Error(), "DB_PASSWORD") {
+		t.Fatalf("expected DB_PASSWORD error, got %v", err)
+	}
+}
+
+func TestLoadRequiresDatabaseName(t *testing.T) {
+	resetConfigEnv(t)
+	t.Setenv("AUTH_JWT_SECRET", "test-secret")
+	t.Setenv("DB_USER", "procureflow")
+	t.Setenv("DB_PASSWORD", "procureflow")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected load to fail when DB_NAME is missing")
+	}
+
+	if !strings.Contains(err.Error(), "DB_NAME") {
+		t.Fatalf("expected DB_NAME error, got %v", err)
+	}
+}
+
+func TestLoadAcceptsExplicitSensitiveConfig(t *testing.T) {
+	resetConfigEnv(t)
+	t.Setenv("APP_ENV", defaultEnvironment)
+	t.Setenv("AUTH_JWT_SECRET", "test-secret")
+	t.Setenv("DB_USER", "procureflow")
+	t.Setenv("DB_PASSWORD", "procureflow")
+	t.Setenv("DB_NAME", "procureflow")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("load returned error: %v", err)
 	}
 
-	if cfg.Auth.JWTSecret != "prod-secret" {
-		t.Fatalf("expected JWT secret prod-secret, got %q", cfg.Auth.JWTSecret)
+	if cfg.Auth.JWTSecret != "test-secret" {
+		t.Fatalf("expected JWT secret test-secret, got %q", cfg.Auth.JWTSecret)
 	}
 
-	if cfg.Database.User != "procureflow-prod" {
-		t.Fatalf("expected DB user procureflow-prod, got %q", cfg.Database.User)
+	if cfg.Database.User != "procureflow" {
+		t.Fatalf("expected DB user procureflow, got %q", cfg.Database.User)
 	}
 }
 

@@ -33,6 +33,7 @@ services:
         condition: service_healthy
     environment:
       APP_ENV: ${APP_ENV:-docker}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET is required}
       DB_HOST: ${DB_HOST:-postgres}
       DB_PORT: ${DB_PORT:-5432}
       DB_USER: ${DB_USER:?DB_USER is required}

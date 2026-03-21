@@ -28,6 +28,10 @@ The project is organized around four boundaries:
 ## Running locally
 
 ```bash
+export AUTH_JWT_SECRET=replace-with-a-long-random-secret
+export DB_USER=procureflow
+export DB_PASSWORD=procureflow
+export DB_NAME=procureflow
 go run ./cmd/migrate up
 go run ./cmd/api
 ```
@@ -95,7 +99,7 @@ JWT signing configuration:
 
 - `AUTH_JWT_SECRET`
 
-In `APP_ENV=production`, the application refuses to start if `AUTH_JWT_SECRET`, `DB_USER`, `DB_PASSWORD`, or `DB_NAME` are still using the built-in development defaults.
+The application refuses to start unless `AUTH_JWT_SECRET`, `DB_USER`, `DB_PASSWORD`, and `DB_NAME` are explicitly set.
 
 ## Phase 1 design baseline
 

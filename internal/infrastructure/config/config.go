@@ -14,17 +14,11 @@ const (
 	defaultShutdownTimeout = 10 * time.Second
 	defaultTenantHeader    = "X-Tenant-ID"
 	defaultJWTIssuer       = "procureflow-api"
-	defaultJWTSecret       = "procureflow-development-secret"
 	defaultAccessTokenTTL  = 24 * time.Hour
 	defaultDBHost          = "localhost"
 	defaultDBPort          = 5432
-	defaultDBUser          = "procureflow"
-	defaultDBPassword      = "procureflow"
-	defaultDBName          = "procureflow"
 	defaultDBSSLMode       = "disable"
 )
-
-const productionEnvironment = "production"
 
 type Config struct {
 	AppName         string
@@ -65,6 +59,25 @@ func (c DatabaseConfig) ConnectionString() string {
 
 func Load() (Config, error) {
 	environment := valueOrDefault("APP_ENV", defaultEnvironment)
+	jwtSecret, err := requiredEnv("AUTH_JWT_SECRET")
+	if err != nil {
+		return Config{}, err
+	}
+
+	dbUser, err := requiredEnv("DB_USER")
+	if err != nil {
+		return Config{}, err
+	}
+
+	dbPassword, err := requiredEnv("DB_PASSWORD")
+	if err != nil {
+		return Config{}, err
+	}
+
+	dbName, err := requiredEnv("DB_NAME")
+	if err != nil {
+		return Config{}, err
+	}
 
 	shutdownTimeout := defaultShutdownTimeout
 	if raw := os.Getenv("APP_SHUTDOWN_TIMEOUT"); raw != "" {
@@ -89,7 +102,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	cfg := Config{
+	return Config{
 		AppName:         valueOrDefault("APP_NAME", defaultAppName),
 		Environment:     environment,
 		HTTPAddress:     valueOrDefault("APP_HTTP_ADDRESS", defaultHTTPAddress),
@@ -97,46 +110,18 @@ func Load() (Config, error) {
 		TenantHeader:    valueOrDefault("APP_TENANT_HEADER", defaultTenantHeader),
 		Auth: AuthConfig{
 			JWTIssuer:      valueOrDefault("AUTH_JWT_ISSUER", defaultJWTIssuer),
-			JWTSecret:      valueOrDefault("AUTH_JWT_SECRET", defaultJWTSecret),
+			JWTSecret:      jwtSecret,
 			AccessTokenTTL: accessTokenTTL,
 		},
 		Database: DatabaseConfig{
 			Host:     valueOrDefault("DB_HOST", defaultDBHost),
 			Port:     dbPort,
-			User:     valueOrDefault("DB_USER", defaultDBUser),
-			Password: valueOrDefault("DB_PASSWORD", defaultDBPassword),
-			Name:     valueOrDefault("DB_NAME", defaultDBName),
+			User:     dbUser,
+			Password: dbPassword,
+			Name:     dbName,
 			SSLMode:  valueOrDefault("DB_SSLMODE", defaultDBSSLMode),
 		},
-	}
-
-	if environment == productionEnvironment {
-		if err := validateProductionConfig(cfg); err != nil {
-			return Config{}, err
-		}
-	}
-
-	return cfg, nil
-}
-
-func validateProductionConfig(cfg Config) error {
-	if cfg.Auth.JWTSecret == defaultJWTSecret {
-		return fmt.Errorf("AUTH_JWT_SECRET must be set to a non-default value in %s", productionEnvironment)
-	}
-
-	if cfg.Database.User == defaultDBUser {
-		return fmt.Errorf("DB_USER must be set to a non-default value in %s", productionEnvironment)
-	}
-
-	if cfg.Database.Password == defaultDBPassword {
-		return fmt.Errorf("DB_PASSWORD must be set to a non-default value in %s", productionEnvironment)
-	}
-
-	if cfg.Database.Name == defaultDBName {
-		return fmt.Errorf("DB_NAME must be set to a non-default value in %s", productionEnvironment)
-	}
-
-	return nil
+	}, nil
 }
 
 func valueOrDefault(key, fallback string) string {
@@ -145,6 +130,15 @@ func valueOrDefault(key, fallback string) string {
 	}
 
 	return fallback
+}
+
+func requiredEnv(key string) (string, error) {
+	value := os.Getenv(key)
+	if value == "" {
+		return "", fmt.Errorf("%s must be set", key)
+	}
+
+	return value, nil
 }
 
 func intFromEnv(key string, fallback int) (int, error) {
