@@ -68,7 +68,6 @@ Implemented API areas:
 
 Known Phase 1 gaps:
 
-- Full request-to-award integration coverage still needs to be added
 - Handler, repository, and real-database integration test coverage should be broadened for production confidence
 
 ## Running with Docker
@@ -150,6 +149,28 @@ go run ./cmd/migrate version
 ```
 
 The API does not auto-run migrations on startup. Apply them explicitly in local development and CI.
+
+## Integration tests
+
+Real PostgreSQL-backed integration tests live under `internal/integration` and are guarded by the `integration` build tag. They are skipped unless `PROCUREFLOW_TEST_DATABASE_URL` is set.
+
+Example:
+
+```bash
+docker run --rm -d --name procureflow-integration-test \
+  -e POSTGRES_DB=procureflow_test \
+  -e POSTGRES_USER=procureflow \
+  -e POSTGRES_PASSWORD=procureflow \
+  -p 55432:5432 \
+  postgres:18-alpine
+
+PROCUREFLOW_TEST_DATABASE_URL='postgres://procureflow:procureflow@localhost:55432/procureflow_test?sslmode=disable' \
+  go test -tags=integration ./internal/integration
+
+docker stop procureflow-integration-test
+```
+
+The integration harness applies embedded migrations, truncates domain tables between runs, and exercises the full procurement request to award flow through real repositories and services.
 
 ## API docs
 

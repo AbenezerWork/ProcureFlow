@@ -169,10 +169,10 @@ Current rough status:
 
 - [x] Add workflow-transition enforcement for quotation lifecycle states
 - [x] Add workflow-transition enforcement for award lifecycle states
-- [ ] Verify cross-slice transitions from approved procurement request to RFQ to quotation to award
+- [x] Verify cross-slice transitions from approved procurement request to RFQ to quotation to award
 
 ### Verification Depth
 
 - [ ] Add HTTP handler tests for vendor, procurement, approval, and RFQ endpoints
 - [ ] Add repository-level tests for the implemented PostgreSQL-backed data access paths
-- [ ] Add broader integration coverage that exercises the full implemented flow against a real database
+- [x] Add broader integration coverage that exercises the full implemented flow against a real database

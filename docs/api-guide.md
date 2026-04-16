@@ -142,7 +142,6 @@ Authorization: Bearer <access-token>
 
 ## Not yet implemented
 
-- Full cross-slice integration test coverage for approved procurement request to RFQ to quotation to award.
 - Repository-level and broader HTTP handler test coverage for production confidence.
 
 ## Manual test flow
