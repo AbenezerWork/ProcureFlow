@@ -15,6 +15,7 @@ import (
 type QuotationService interface {
 	Create(ctx context.Context, input applicationquotation.CreateInput) (domainquotation.Quotation, error)
 	List(ctx context.Context, input applicationquotation.ListInput) ([]domainquotation.Quotation, error)
+	Compare(ctx context.Context, input applicationquotation.ListInput) (applicationquotation.ComparisonResult, error)
 	Get(ctx context.Context, organizationID, rfqID, quotationID, currentUser uuid.UUID) (domainquotation.Quotation, error)
 	Update(ctx context.Context, input applicationquotation.UpdateInput) (domainquotation.Quotation, error)
 	Submit(ctx context.Context, input applicationquotation.TransitionInput) (domainquotation.Quotation, error)
@@ -54,6 +55,25 @@ type updateQuotationItemRequest struct {
 	UnitPrice    *string `json:"unit_price"`
 	DeliveryDays *int32  `json:"delivery_days"`
 	Notes        *string `json:"notes"`
+}
+
+func (h *QuotationHandler) Compare(w http.ResponseWriter, r *http.Request) {
+	currentUser, organizationID, rfqID, ok := authenticatedRFQRequest(w, r)
+	if !ok {
+		return
+	}
+
+	comparison, err := h.service.Compare(r.Context(), applicationquotation.ListInput{
+		OrganizationID: organizationID,
+		RFQID:          rfqID,
+		CurrentUser:    currentUser,
+	})
+	if err != nil {
+		writeQuotationError(w, err, "compare quotations")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, comparisonResponse(comparison))
 }
 
 func (h *QuotationHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -362,5 +382,56 @@ func quotationItemResponse(item domainquotation.Item) map[string]any {
 		"notes":           item.Notes,
 		"created_at":      item.CreatedAt.UTC().Format(time.RFC3339),
 		"updated_at":      item.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func comparisonResponse(result applicationquotation.ComparisonResult) map[string]any {
+	quotations := make([]map[string]any, 0, len(result.Comparison.Quotations))
+	for _, quotation := range result.Comparison.Quotations {
+		quotations = append(quotations, map[string]any{
+			"quotation_id":   quotation.QuotationID,
+			"rfq_vendor_id":  quotation.RFQVendorID,
+			"vendor_id":      quotation.VendorID,
+			"vendor_name":    quotation.VendorName,
+			"status":         string(quotation.Status),
+			"currency_code":  quotation.CurrencyCode,
+			"lead_time_days": quotation.LeadTimeDays,
+			"payment_terms":  quotation.PaymentTerms,
+			"notes":          quotation.Notes,
+			"total_amount":   quotation.TotalAmount,
+		})
+	}
+
+	lineItems := make([]map[string]any, 0, len(result.Comparison.LineItems))
+	for _, item := range result.Comparison.LineItems {
+		prices := make([]map[string]any, 0, len(item.Prices))
+		for _, price := range item.Prices {
+			prices = append(prices, map[string]any{
+				"quotation_id":      price.QuotationID,
+				"quotation_item_id": price.QuotationItemID,
+				"vendor_id":         price.VendorID,
+				"vendor_name":       price.VendorName,
+				"unit_price":        price.UnitPrice,
+				"line_total":        price.LineTotal,
+				"delivery_days":     price.DeliveryDays,
+				"notes":             price.Notes,
+			})
+		}
+
+		lineItems = append(lineItems, map[string]any{
+			"rfq_item_id": item.RFQItemID,
+			"line_number": item.LineNumber,
+			"item_name":   item.ItemName,
+			"description": item.Description,
+			"quantity":    item.Quantity,
+			"unit":        item.Unit,
+			"prices":      prices,
+		})
+	}
+
+	return map[string]any{
+		"rfq":        rfqResponse(result.RFQ),
+		"quotations": quotations,
+		"line_items": lineItems,
 	}
 }

@@ -19,6 +19,7 @@ type fakeRepository struct {
 	createQuotationItemFn func(context.Context, CreateItemParams) (domainquotation.Item, error)
 	getQuotationFn        func(context.Context, uuid.UUID, uuid.UUID) (domainquotation.Quotation, error)
 	listQuotationsByRFQFn func(context.Context, uuid.UUID, uuid.UUID) ([]domainquotation.Quotation, error)
+	compareQuotationsFn   func(context.Context, uuid.UUID, uuid.UUID) ([]domainquotation.ComparisonRow, error)
 	updateQuotationFn     func(context.Context, UpdateQuotationParams) (domainquotation.Quotation, error)
 	submitQuotationFn     func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (domainquotation.Quotation, error)
 	rejectQuotationFn     func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, *string) (domainquotation.Quotation, error)
@@ -45,6 +46,10 @@ func (f fakeRepository) GetQuotation(ctx context.Context, organizationID, quotat
 
 func (f fakeRepository) ListQuotationsByRFQ(ctx context.Context, organizationID, rfqID uuid.UUID) ([]domainquotation.Quotation, error) {
 	return f.listQuotationsByRFQFn(ctx, organizationID, rfqID)
+}
+
+func (f fakeRepository) CompareRFQQuotations(ctx context.Context, organizationID, rfqID uuid.UUID) ([]domainquotation.ComparisonRow, error) {
+	return f.compareQuotationsFn(ctx, organizationID, rfqID)
 }
 
 func (f fakeRepository) UpdateDraftQuotation(ctx context.Context, params UpdateQuotationParams) (domainquotation.Quotation, error) {
@@ -438,6 +443,142 @@ func TestServiceListAllowsViewer(t *testing.T) {
 	}
 	if len(quotations) != 1 {
 		t.Fatalf("expected 1 quotation, got %d", len(quotations))
+	}
+}
+
+func TestServiceCompareGroupsSubmittedQuotationRows(t *testing.T) {
+	t.Parallel()
+
+	orgID := uuid.New()
+	rfqID := uuid.New()
+	userID := uuid.New()
+	quotationAID := uuid.New()
+	quotationBID := uuid.New()
+	rfqVendorAID := uuid.New()
+	rfqVendorBID := uuid.New()
+	vendorAID := uuid.New()
+	vendorBID := uuid.New()
+	itemOneID := uuid.New()
+	itemTwoID := uuid.New()
+	leadTime := int32(7)
+
+	repo := fakeRepository{
+		getMembershipFn: func(_ context.Context, gotOrgID, gotUserID uuid.UUID) (domainorganization.Membership, error) {
+			if gotOrgID != orgID || gotUserID != userID {
+				t.Fatalf("unexpected membership lookup")
+			}
+			return domainorganization.Membership{
+				Role:   domainorganization.MembershipRoleViewer,
+				Status: domainorganization.MembershipStatusActive,
+			}, nil
+		},
+		getRFQFn: func(_ context.Context, gotOrgID, gotRFQID uuid.UUID) (domainrfq.RFQ, error) {
+			if gotOrgID != orgID || gotRFQID != rfqID {
+				t.Fatalf("unexpected rfq lookup")
+			}
+			return domainrfq.RFQ{
+				ID:             rfqID,
+				OrganizationID: orgID,
+				Status:         domainrfq.StatusEvaluated,
+				Title:          "Office Chairs",
+			}, nil
+		},
+		compareQuotationsFn: func(_ context.Context, gotOrgID, gotRFQID uuid.UUID) ([]domainquotation.ComparisonRow, error) {
+			if gotOrgID != orgID || gotRFQID != rfqID {
+				t.Fatalf("unexpected comparison args")
+			}
+			return []domainquotation.ComparisonRow{
+				{
+					QuotationID:     quotationAID,
+					RFQID:           rfqID,
+					RFQVendorID:     rfqVendorAID,
+					Status:          domainquotation.StatusSubmitted,
+					CurrencyCode:    "USD",
+					LeadTimeDays:    &leadTime,
+					VendorID:        vendorAID,
+					VendorName:      "Blue Nile Supplies",
+					TotalAmount:     "150.00",
+					QuotationItemID: uuid.New(),
+					RFQItemID:       itemOneID,
+					LineNumber:      1,
+					ItemName:        "Chair",
+					Quantity:        "5.00",
+					Unit:            "pcs",
+					UnitPrice:       "10.00",
+					LineTotal:       "50.00",
+				},
+				{
+					QuotationID:     quotationBID,
+					RFQID:           rfqID,
+					RFQVendorID:     rfqVendorBID,
+					Status:          domainquotation.StatusSubmitted,
+					CurrencyCode:    "USD",
+					VendorID:        vendorBID,
+					VendorName:      "Red Sea Trading",
+					TotalAmount:     "180.00",
+					QuotationItemID: uuid.New(),
+					RFQItemID:       itemOneID,
+					LineNumber:      1,
+					ItemName:        "Chair",
+					Quantity:        "5.00",
+					Unit:            "pcs",
+					UnitPrice:       "12.00",
+					LineTotal:       "60.00",
+				},
+				{
+					QuotationID:     quotationAID,
+					RFQID:           rfqID,
+					RFQVendorID:     rfqVendorAID,
+					Status:          domainquotation.StatusSubmitted,
+					CurrencyCode:    "USD",
+					LeadTimeDays:    &leadTime,
+					VendorID:        vendorAID,
+					VendorName:      "Blue Nile Supplies",
+					TotalAmount:     "150.00",
+					QuotationItemID: uuid.New(),
+					RFQItemID:       itemTwoID,
+					LineNumber:      2,
+					ItemName:        "Desk",
+					Quantity:        "2.00",
+					Unit:            "pcs",
+					UnitPrice:       "50.00",
+					LineTotal:       "100.00",
+				},
+			}, nil
+		},
+	}
+
+	service := NewService(repo, fakeTxManager{
+		withinFn: func(_ context.Context, fn func(Repository) error) error {
+			return fn(repo)
+		},
+	})
+
+	result, err := service.Compare(context.Background(), ListInput{
+		OrganizationID: orgID,
+		RFQID:          rfqID,
+		CurrentUser:    userID,
+	})
+	if err != nil {
+		t.Fatalf("compare quotations returned error: %v", err)
+	}
+	if result.RFQ.ID != rfqID {
+		t.Fatalf("expected rfq to be included in comparison")
+	}
+	if len(result.Comparison.Quotations) != 2 {
+		t.Fatalf("expected 2 quotations, got %d", len(result.Comparison.Quotations))
+	}
+	if result.Comparison.Quotations[0].TotalAmount != "150.00" {
+		t.Fatalf("unexpected first quotation total: %s", result.Comparison.Quotations[0].TotalAmount)
+	}
+	if len(result.Comparison.LineItems) != 2 {
+		t.Fatalf("expected 2 line items, got %d", len(result.Comparison.LineItems))
+	}
+	if len(result.Comparison.LineItems[0].Prices) != 2 {
+		t.Fatalf("expected 2 price entries for first item, got %d", len(result.Comparison.LineItems[0].Prices))
+	}
+	if result.Comparison.LineItems[0].Prices[1].LineTotal != "60.00" {
+		t.Fatalf("unexpected second vendor line total: %s", result.Comparison.LineItems[0].Prices[1].LineTotal)
 	}
 }
 

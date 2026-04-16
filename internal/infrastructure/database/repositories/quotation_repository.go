@@ -129,6 +129,46 @@ func (r *QuotationRepository) ListQuotationsByRFQ(ctx context.Context, organizat
 	return quotations, nil
 }
 
+func (r *QuotationRepository) CompareRFQQuotations(ctx context.Context, organizationID, rfqID uuid.UUID) ([]domainquotation.ComparisonRow, error) {
+	rows, err := r.store.CompareRFQQuotations(ctx, sqlc.CompareRFQQuotationsParams{
+		OrganizationID: organizationID,
+		RfqID:          rfqID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	comparisonRows := make([]domainquotation.ComparisonRow, 0, len(rows))
+	for _, row := range rows {
+		comparisonRows = append(comparisonRows, domainquotation.ComparisonRow{
+			QuotationID:     row.QuotationID,
+			RFQID:           row.RfqID,
+			RFQVendorID:     row.RfqVendorID,
+			Status:          domainquotation.Status(row.Status),
+			CurrencyCode:    row.CurrencyCode,
+			LeadTimeDays:    row.LeadTimeDays,
+			PaymentTerms:    row.PaymentTerms,
+			QuotationNotes:  row.QuotationNotes,
+			VendorID:        row.VendorID,
+			VendorName:      row.VendorName,
+			TotalAmount:     requiredNumeric(row.TotalAmount),
+			QuotationItemID: row.QuotationItemID,
+			RFQItemID:       row.RfqItemID,
+			LineNumber:      row.LineNumber,
+			ItemName:        row.ItemName,
+			Description:     row.Description,
+			Quantity:        requiredNumeric(row.Quantity),
+			Unit:            row.Unit,
+			UnitPrice:       requiredNumeric(row.UnitPrice),
+			LineTotal:       requiredNumeric(row.LineTotal),
+			DeliveryDays:    row.DeliveryDays,
+			ItemNotes:       row.ItemNotes,
+		})
+	}
+
+	return comparisonRows, nil
+}
+
 func (r *QuotationRepository) UpdateDraftQuotation(ctx context.Context, params applicationquotation.UpdateQuotationParams) (domainquotation.Quotation, error) {
 	updatedByUserID := params.UpdatedByUserID
 	quotation, err := r.store.UpdateDraftQuotation(ctx, sqlc.UpdateDraftQuotationParams{

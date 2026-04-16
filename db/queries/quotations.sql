@@ -123,13 +123,26 @@ WHERE organization_id = $1
 SELECT
     q.id AS quotation_id,
     q.rfq_id,
+    q.rfq_vendor_id,
     q.status,
     q.currency_code,
     q.lead_time_days,
+    q.payment_terms,
+    q.notes AS quotation_notes,
     v.id AS vendor_id,
     v.name AS vendor_name,
-    COALESCE(SUM(qi.quantity * qi.unit_price), 0)::NUMERIC(18, 2) AS total_amount,
-    MIN(qi.delivery_days) AS fastest_item_delivery_days
+    SUM(qi.quantity * qi.unit_price) OVER (PARTITION BY q.id)::NUMERIC(18, 2) AS total_amount,
+    qi.id AS quotation_item_id,
+    qi.rfq_item_id,
+    qi.line_number,
+    qi.item_name,
+    qi.description,
+    qi.quantity,
+    qi.unit,
+    qi.unit_price,
+    (qi.quantity * qi.unit_price)::NUMERIC(18, 2) AS line_total,
+    qi.delivery_days,
+    qi.notes AS item_notes
 FROM quotations AS q
 JOIN rfq_vendors AS rv
     ON rv.rfq_id = q.rfq_id
@@ -137,13 +150,13 @@ JOIN rfq_vendors AS rv
 JOIN vendors AS v
     ON v.organization_id = rv.organization_id
    AND v.id = rv.vendor_id
-LEFT JOIN quotation_items AS qi
+JOIN quotation_items AS qi
     ON qi.organization_id = q.organization_id
    AND qi.quotation_id = q.id
 WHERE q.organization_id = $1
   AND q.rfq_id = $2
-GROUP BY q.id, q.rfq_id, q.status, q.currency_code, q.lead_time_days, v.id, v.name
-ORDER BY total_amount ASC, q.created_at ASC;
+  AND q.status = 'submitted'
+ORDER BY total_amount ASC, v.name ASC, q.created_at ASC, qi.line_number ASC;
 
 -- name: CreateRFQAward :one
 INSERT INTO rfq_awards (

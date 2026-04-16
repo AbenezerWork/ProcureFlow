@@ -13,7 +13,7 @@ The modular monolith should be split into these business modules:
 - `procurement`: procurement request drafts, items, submission, cancellation
 - `approvals`: approver inbox, approve, reject, decision comment
 - `rfqs`: RFQ creation from approved requests, vendor attachment, publish, close, evaluate, cancel
-- `quotations`: quotation entry, item pricing, submit, reject
+- `quotations`: quotation entry, item pricing, submit, reject, RFQ quotation comparison
 - `awards`: RFQ award decision and award lookup
 - `activitylog`: timeline-ready audit records for major domain actions
 
@@ -101,3 +101,16 @@ Highlights:
 - `activity_logs` supports timeline rendering by `entity_type` and `entity_id`
 
 The schema favors explicit foreign keys and duplicate `organization_id` columns on org-owned tables because the product requirements prioritize tenant isolation over normalization purity.
+
+## Current implementation note
+
+The repository currently implements most Phase 1 backend slices end to end: auth, organizations, memberships, tenant enforcement, vendors, procurement requests, approvals, RFQs, quotations, RFQ quotation comparison, awards, activity logs, migrations, SQL generation, OpenAPI, and Docker startup.
+
+Current implementation choices that differ slightly from the earlier wording:
+
+- Award creation is limited to active `owner`, `admin`, and `procurement_officer` memberships.
+- `approver` is used for procurement request approval, not award creation.
+- Membership lifecycle includes a `removed` status.
+- RFQ items are snapshotted from procurement request items, and quotation items are snapshotted from RFQ items with initial zero pricing.
+
+The remaining gaps are verification depth: full cross-slice integration coverage, repository-level tests for PostgreSQL-backed data access, and broader HTTP handler coverage.

@@ -80,6 +80,7 @@ type Repository interface {
 	CreateQuotationItem(ctx context.Context, params CreateItemParams) (domainquotation.Item, error)
 	GetQuotation(ctx context.Context, organizationID, quotationID uuid.UUID) (domainquotation.Quotation, error)
 	ListQuotationsByRFQ(ctx context.Context, organizationID, rfqID uuid.UUID) ([]domainquotation.Quotation, error)
+	CompareRFQQuotations(ctx context.Context, organizationID, rfqID uuid.UUID) ([]domainquotation.ComparisonRow, error)
 	UpdateDraftQuotation(ctx context.Context, params UpdateQuotationParams) (domainquotation.Quotation, error)
 	SubmitQuotation(ctx context.Context, organizationID, quotationID, submittedByUserID uuid.UUID) (domainquotation.Quotation, error)
 	RejectQuotation(ctx context.Context, organizationID, quotationID, rejectedByUserID uuid.UUID, rejectionReason *string) (domainquotation.Quotation, error)
@@ -111,6 +112,11 @@ type ListInput struct {
 	OrganizationID uuid.UUID
 	RFQID          uuid.UUID
 	CurrentUser    uuid.UUID
+}
+
+type ComparisonResult struct {
+	RFQ        domainrfq.RFQ
+	Comparison domainquotation.Comparison
 }
 
 type UpdateInput struct {
@@ -280,6 +286,33 @@ func (s Service) List(ctx context.Context, input ListInput) ([]domainquotation.Q
 	}
 
 	return quotations, nil
+}
+
+func (s Service) Compare(ctx context.Context, input ListInput) (ComparisonResult, error) {
+	if input.OrganizationID == uuid.Nil || input.RFQID == uuid.Nil || input.CurrentUser == uuid.Nil {
+		return ComparisonResult{}, ErrInvalidQuotation
+	}
+	if _, err := s.loadActiveMembership(ctx, input.OrganizationID, input.CurrentUser); err != nil {
+		return ComparisonResult{}, err
+	}
+
+	rfq, err := s.repo.GetRFQ(ctx, input.OrganizationID, input.RFQID)
+	if err != nil {
+		if errors.Is(err, ErrRFQNotFound) {
+			return ComparisonResult{}, err
+		}
+		return ComparisonResult{}, fmt.Errorf("load rfq: %w", err)
+	}
+
+	rows, err := s.repo.CompareRFQQuotations(ctx, input.OrganizationID, input.RFQID)
+	if err != nil {
+		return ComparisonResult{}, fmt.Errorf("compare quotations: %w", err)
+	}
+
+	return ComparisonResult{
+		RFQ:        rfq,
+		Comparison: buildComparison(input.RFQID, rows),
+	}, nil
 }
 
 func (s Service) Get(ctx context.Context, organizationID, rfqID, quotationID, currentUser uuid.UUID) (domainquotation.Quotation, error) {
@@ -698,6 +731,62 @@ func findVendorLink(vendors []domainrfq.VendorLink, rfqVendorID uuid.UUID) (doma
 	}
 
 	return domainrfq.VendorLink{}, false
+}
+
+func buildComparison(rfqID uuid.UUID, rows []domainquotation.ComparisonRow) domainquotation.Comparison {
+	comparison := domainquotation.Comparison{
+		RFQID:      rfqID,
+		Quotations: make([]domainquotation.ComparisonQuotation, 0),
+		LineItems:  make([]domainquotation.ComparisonLineItem, 0),
+	}
+	quotationSeen := make(map[uuid.UUID]bool)
+	lineItemIndex := make(map[uuid.UUID]int)
+
+	for _, row := range rows {
+		if !quotationSeen[row.QuotationID] {
+			comparison.Quotations = append(comparison.Quotations, domainquotation.ComparisonQuotation{
+				QuotationID:  row.QuotationID,
+				RFQVendorID:  row.RFQVendorID,
+				VendorID:     row.VendorID,
+				VendorName:   row.VendorName,
+				Status:       row.Status,
+				CurrencyCode: row.CurrencyCode,
+				LeadTimeDays: row.LeadTimeDays,
+				PaymentTerms: row.PaymentTerms,
+				Notes:        row.QuotationNotes,
+				TotalAmount:  row.TotalAmount,
+			})
+			quotationSeen[row.QuotationID] = true
+		}
+
+		index, ok := lineItemIndex[row.RFQItemID]
+		if !ok {
+			comparison.LineItems = append(comparison.LineItems, domainquotation.ComparisonLineItem{
+				RFQItemID:   row.RFQItemID,
+				LineNumber:  row.LineNumber,
+				ItemName:    row.ItemName,
+				Description: row.Description,
+				Quantity:    row.Quantity,
+				Unit:        row.Unit,
+				Prices:      make([]domainquotation.ComparisonPrice, 0),
+			})
+			index = len(comparison.LineItems) - 1
+			lineItemIndex[row.RFQItemID] = index
+		}
+
+		comparison.LineItems[index].Prices = append(comparison.LineItems[index].Prices, domainquotation.ComparisonPrice{
+			QuotationID:     row.QuotationID,
+			QuotationItemID: row.QuotationItemID,
+			VendorID:        row.VendorID,
+			VendorName:      row.VendorName,
+			UnitPrice:       row.UnitPrice,
+			LineTotal:       row.LineTotal,
+			DeliveryDays:    row.DeliveryDays,
+			Notes:           row.ItemNotes,
+		})
+	}
+
+	return comparison
 }
 
 func normalizeQuotationFields(currencyInput *string, leadTimeDays *int32, paymentTermsInput *string, notesInput *string) (string, *int32, *string, *string, error) {

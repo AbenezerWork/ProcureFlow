@@ -11,6 +11,23 @@ Completed means the slice is implemented end to end for the current backend stac
 
 Database schema, raw SQL, or generated `sqlc` code alone do not count as a completed deliverable.
 
+## Current Assessment
+
+The repository is functionally strong for Phase 1. Auth, organizations, memberships, tenant enforcement, vendors, procurement requests, approvals, RFQs, quotations, quotation comparison, awards, activity logs, migrations, SQL generation, `pgx`, transaction handling, OpenAPI, and Docker startup are present.
+
+Strictly against the original Phase 1 target, the remaining open work is mostly verification hardening rather than missing workflow implementation.
+
+Current intentional design differences from the earlier Phase 1 wording:
+
+- Award creation is restricted to active `owner`, `admin`, and `procurement_officer` memberships; `approver` participates in procurement request approvals, not award creation.
+- Membership statuses include `removed` in addition to `invited`, `active`, and `suspended`.
+- RFQ and quotation item snapshots are explicit backend behavior, which is stronger than the original generic workflow wording.
+
+Current rough status:
+
+- Functional Phase 1 completion: about 95%
+- Verification hardening completion: about 75-80%
+
 ## Foundation
 
 - [x] Clean architecture project layout under `internal/domain`, `internal/application`, `internal/interfaces`, and `internal/infrastructure`
@@ -101,19 +118,27 @@ Database schema, raw SQL, or generated `sqlc` code alone do not count as a compl
 ## Verification And Documentation Present In Repo
 
 - [x] README updated to reflect the current runnable stack
-- [x] API usage guide updated for the implemented auth, organization, vendor, procurement, approval, and RFQ flows
-- [x] Application-service tests for identity, organization, vendor, procurement, and RFQ slices
+- [x] API usage guide updated for the implemented auth, organization, vendor, procurement, approval, RFQ, quotation, award, and activity-log flows
+- [x] Application-service tests for identity, organization, vendor, procurement, RFQ, quotation, award, and activity-log slices
 - [x] Router coverage for the mounted API surface
 - [x] Focused HTTP handler coverage for the organization slice
 - [x] Manual smoke-test procedure documented for a real PostgreSQL-backed API instance
 
-## Partial Groundwork Present But Not Delivered End To End
+## Delivered Since Earlier Partial Groundwork
 
 - [x] Quotation tables, SQL, and generated `sqlc` code exist, and the quotation domain, application service, repository wiring, HTTP surface, and focused test coverage are now delivered
 - [x] Award tables, SQL, and generated `sqlc` code exist, and the award domain, application service, repository wiring, HTTP surface, and focused test coverage are now delivered
 - [x] Activity log tables, SQL, generated `sqlc` code, transactional workflow writes, and an entity-scoped read endpoint are now wired as a deliverable timeline feature
 
 ## Remaining Deliverables For A Fuller Phase 1 Pass
+
+### Quotation Comparison
+
+- [x] Add RFQ quotation comparison domain/application read model
+- [x] Implement repository read queries for comparing submitted quotations by RFQ and line item
+- [x] Expose an RFQ comparison endpoint at `/api/v1/organizations/{organizationID}/rfqs/{rfqID}/comparison`
+- [x] Add OpenAPI and API guide coverage for the comparison response
+- [x] Add automated tests for comparison authorization, totals, and line-item comparison behavior
 
 ### Quotations
 

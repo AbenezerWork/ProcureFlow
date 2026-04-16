@@ -16,13 +16,26 @@ const compareRFQQuotations = `-- name: CompareRFQQuotations :many
 SELECT
     q.id AS quotation_id,
     q.rfq_id,
+    q.rfq_vendor_id,
     q.status,
     q.currency_code,
     q.lead_time_days,
+    q.payment_terms,
+    q.notes AS quotation_notes,
     v.id AS vendor_id,
     v.name AS vendor_name,
-    COALESCE(SUM(qi.quantity * qi.unit_price), 0)::NUMERIC(18, 2) AS total_amount,
-    MIN(qi.delivery_days) AS fastest_item_delivery_days
+    SUM(qi.quantity * qi.unit_price) OVER (PARTITION BY q.id)::NUMERIC(18, 2) AS total_amount,
+    qi.id AS quotation_item_id,
+    qi.rfq_item_id,
+    qi.line_number,
+    qi.item_name,
+    qi.description,
+    qi.quantity,
+    qi.unit,
+    qi.unit_price,
+    (qi.quantity * qi.unit_price)::NUMERIC(18, 2) AS line_total,
+    qi.delivery_days,
+    qi.notes AS item_notes
 FROM quotations AS q
 JOIN rfq_vendors AS rv
     ON rv.rfq_id = q.rfq_id
@@ -30,13 +43,13 @@ JOIN rfq_vendors AS rv
 JOIN vendors AS v
     ON v.organization_id = rv.organization_id
    AND v.id = rv.vendor_id
-LEFT JOIN quotation_items AS qi
+JOIN quotation_items AS qi
     ON qi.organization_id = q.organization_id
    AND qi.quotation_id = q.id
 WHERE q.organization_id = $1
   AND q.rfq_id = $2
-GROUP BY q.id, q.rfq_id, q.status, q.currency_code, q.lead_time_days, v.id, v.name
-ORDER BY total_amount ASC, q.created_at ASC
+  AND q.status = 'submitted'
+ORDER BY total_amount ASC, v.name ASC, q.created_at ASC, qi.line_number ASC
 `
 
 type CompareRFQQuotationsParams struct {
@@ -45,15 +58,28 @@ type CompareRFQQuotationsParams struct {
 }
 
 type CompareRFQQuotationsRow struct {
-	QuotationID             uuid.UUID       `json:"quotation_id"`
-	RfqID                   uuid.UUID       `json:"rfq_id"`
-	Status                  QuotationStatus `json:"status"`
-	CurrencyCode            string          `json:"currency_code"`
-	LeadTimeDays            *int32          `json:"lead_time_days"`
-	VendorID                uuid.UUID       `json:"vendor_id"`
-	VendorName              string          `json:"vendor_name"`
-	TotalAmount             pgtype.Numeric  `json:"total_amount"`
-	FastestItemDeliveryDays interface{}     `json:"fastest_item_delivery_days"`
+	QuotationID     uuid.UUID       `json:"quotation_id"`
+	RfqID           uuid.UUID       `json:"rfq_id"`
+	RfqVendorID     uuid.UUID       `json:"rfq_vendor_id"`
+	Status          QuotationStatus `json:"status"`
+	CurrencyCode    string          `json:"currency_code"`
+	LeadTimeDays    *int32          `json:"lead_time_days"`
+	PaymentTerms    *string         `json:"payment_terms"`
+	QuotationNotes  *string         `json:"quotation_notes"`
+	VendorID        uuid.UUID       `json:"vendor_id"`
+	VendorName      string          `json:"vendor_name"`
+	TotalAmount     pgtype.Numeric  `json:"total_amount"`
+	QuotationItemID uuid.UUID       `json:"quotation_item_id"`
+	RfqItemID       uuid.UUID       `json:"rfq_item_id"`
+	LineNumber      int32           `json:"line_number"`
+	ItemName        string          `json:"item_name"`
+	Description     *string         `json:"description"`
+	Quantity        pgtype.Numeric  `json:"quantity"`
+	Unit            string          `json:"unit"`
+	UnitPrice       pgtype.Numeric  `json:"unit_price"`
+	LineTotal       pgtype.Numeric  `json:"line_total"`
+	DeliveryDays    *int32          `json:"delivery_days"`
+	ItemNotes       *string         `json:"item_notes"`
 }
 
 func (q *Queries) CompareRFQQuotations(ctx context.Context, arg CompareRFQQuotationsParams) ([]CompareRFQQuotationsRow, error) {
@@ -68,13 +94,26 @@ func (q *Queries) CompareRFQQuotations(ctx context.Context, arg CompareRFQQuotat
 		if err := rows.Scan(
 			&i.QuotationID,
 			&i.RfqID,
+			&i.RfqVendorID,
 			&i.Status,
 			&i.CurrencyCode,
 			&i.LeadTimeDays,
+			&i.PaymentTerms,
+			&i.QuotationNotes,
 			&i.VendorID,
 			&i.VendorName,
 			&i.TotalAmount,
-			&i.FastestItemDeliveryDays,
+			&i.QuotationItemID,
+			&i.RfqItemID,
+			&i.LineNumber,
+			&i.ItemName,
+			&i.Description,
+			&i.Quantity,
+			&i.Unit,
+			&i.UnitPrice,
+			&i.LineTotal,
+			&i.DeliveryDays,
+			&i.ItemNotes,
 		); err != nil {
 			return nil, err
 		}

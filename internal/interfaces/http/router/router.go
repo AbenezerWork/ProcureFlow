@@ -65,6 +65,7 @@ type RFQRoutes interface {
 }
 
 type QuotationRoutes interface {
+	Compare(http.ResponseWriter, *http.Request)
 	Create(http.ResponseWriter, *http.Request)
 	List(http.ResponseWriter, *http.Request)
 	Get(http.ResponseWriter, *http.Request)
@@ -187,6 +188,7 @@ func New(
 								r.Post("/", rfqHandler.AttachVendor)
 								r.Delete("/{vendorID}", rfqHandler.RemoveVendor)
 							})
+							r.Get("/comparison", quotationHandler.Compare)
 							r.Route("/quotations", func(r chi.Router) {
 								r.Get("/", quotationHandler.List)
 								r.Post("/", quotationHandler.Create)

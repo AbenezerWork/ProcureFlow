@@ -2086,6 +2086,49 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/organizations/{organizationID}/rfqs/{rfqID}/comparison:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/OrganizationTenantHeader'
+      - $ref: '#/components/parameters/RFQID'
+    get:
+      tags: [Quotations]
+      summary: Compare submitted quotations for an RFQ
+      description: Returns submitted quotation totals and line-item pricing grouped by RFQ item. Any active organization member may perform this action.
+      operationId: compareRFQQuotations
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: RFQ quotation comparison
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RFQQuotationComparisonResponse'
+        '400':
+          description: Invalid organization or RFQ identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User cannot access this organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: RFQ not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/organizations/{organizationID}/rfqs/{rfqID}/quotations:
     parameters:
       - $ref: '#/components/parameters/OrganizationID'
@@ -3670,6 +3713,122 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/QuotationResponse'
+    RFQQuotationComparisonResponse:
+      type: object
+      additionalProperties: false
+      required: [rfq, quotations, line_items]
+      properties:
+        rfq:
+          $ref: '#/components/schemas/RFQResponse'
+        quotations:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuotationComparisonSummary'
+        line_items:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuotationComparisonLineItem'
+    QuotationComparisonSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - quotation_id
+        - rfq_vendor_id
+        - vendor_id
+        - vendor_name
+        - status
+        - currency_code
+        - total_amount
+      properties:
+        quotation_id:
+          type: string
+          format: uuid
+        rfq_vendor_id:
+          type: string
+          format: uuid
+        vendor_id:
+          type: string
+          format: uuid
+        vendor_name:
+          type: string
+        status:
+          type: string
+          enum:
+            - submitted
+        currency_code:
+          type: string
+        lead_time_days:
+          type: integer
+          nullable: true
+        payment_terms:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        total_amount:
+          type: string
+    QuotationComparisonLineItem:
+      type: object
+      additionalProperties: false
+      required:
+        - rfq_item_id
+        - line_number
+        - item_name
+        - quantity
+        - unit
+        - prices
+      properties:
+        rfq_item_id:
+          type: string
+          format: uuid
+        line_number:
+          type: integer
+        item_name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        quantity:
+          type: string
+        unit:
+          type: string
+        prices:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuotationComparisonPrice'
+    QuotationComparisonPrice:
+      type: object
+      additionalProperties: false
+      required:
+        - quotation_id
+        - quotation_item_id
+        - vendor_id
+        - vendor_name
+        - unit_price
+        - line_total
+      properties:
+        quotation_id:
+          type: string
+          format: uuid
+        quotation_item_id:
+          type: string
+          format: uuid
+        vendor_id:
+          type: string
+          format: uuid
+        vendor_name:
+          type: string
+        unit_price:
+          type: string
+        line_total:
+          type: string
+        delivery_days:
+          type: integer
+          nullable: true
+        notes:
+          type: string
+          nullable: true
     QuotationItemResponse:
       type: object
       additionalProperties: false

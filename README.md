@@ -62,6 +62,14 @@ Implemented API areas:
 - vendors: create, list, get, update, archive
 - procurement requests: draft create/list/get/update, item CRUD, submit, approve, reject, cancel
 - rfqs: create from approved requests, snapshot items, attach/remove vendors, publish, close, evaluate, cancel
+- quotations: create/list/get/update, item pricing, submit, reject, compare submitted RFQ quotations
+- awards: create and look up the RFQ award decision
+- activity logs: query entity timelines for organization-scoped workflow activity
+
+Known Phase 1 gaps:
+
+- Full request-to-award integration coverage still needs to be added
+- Handler, repository, and real-database integration test coverage should be broadened for production confidence
 
 ## Running with Docker
 

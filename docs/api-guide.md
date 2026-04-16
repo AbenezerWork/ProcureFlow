@@ -73,6 +73,7 @@ Authorization: Bearer <access-token>
 - `GET /api/v1/organizations/{organizationID}/rfqs/{rfqID}/vendors`
 - `POST /api/v1/organizations/{organizationID}/rfqs/{rfqID}/vendors`
 - `DELETE /api/v1/organizations/{organizationID}/rfqs/{rfqID}/vendors/{vendorID}`
+- `GET /api/v1/organizations/{organizationID}/rfqs/{rfqID}/comparison`
 - `GET /api/v1/organizations/{organizationID}/rfqs/{rfqID}/quotations/`
 - `POST /api/v1/organizations/{organizationID}/rfqs/{rfqID}/quotations/`
 - `GET /api/v1/organizations/{organizationID}/rfqs/{rfqID}/quotations/{quotationID}`
@@ -132,11 +133,17 @@ Authorization: Bearer <access-token>
 - Quotation item pricing updates are only allowed while the quotation is in `draft` and the RFQ remains `published`.
 - Quotation submission is only allowed for `draft` quotations while the RFQ remains `published`.
 - Quotation rejection is allowed for `draft` or `submitted` quotations while the RFQ is `published`, `closed`, or `evaluated`.
+- Any active organization member can compare submitted quotations for an RFQ.
 - Any active organization member can look up the RFQ award.
 - Only active `owner`, `admin`, and `procurement_officer` memberships can create an award.
 - Awards can only be created for `submitted` quotations that belong to the target RFQ.
 - Award creation requires the RFQ to be in `evaluated` and marks the RFQ as `awarded`.
-- Activity logs are currently emitted for procurement request submit/approve/reject, RFQ creation, quotation submit/reject, and RFQ award creation.
+- Activity logs are emitted for organization and membership actions, vendor changes, procurement request lifecycle and item actions, RFQ lifecycle and vendor actions, quotation lifecycle and pricing actions, and award creation. The canonical event list is maintained in `docs/activity-log-taxonomy.md`.
+
+## Not yet implemented
+
+- Full cross-slice integration test coverage for approved procurement request to RFQ to quotation to award.
+- Repository-level and broader HTTP handler test coverage for production confidence.
 
 ## Manual test flow
 
@@ -354,6 +361,14 @@ Submit a quotation:
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/organizations/$ORG_ID/rfqs/$RFQ_ID/quotations/$QUOTATION_ID/submit \
+  -H "X-Tenant-ID: $ORG_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Compare submitted quotations for an RFQ:
+
+```bash
+curl http://localhost:8080/api/v1/organizations/$ORG_ID/rfqs/$RFQ_ID/comparison \
   -H "X-Tenant-ID: $ORG_ID" \
   -H "Authorization: Bearer $TOKEN"
 ```

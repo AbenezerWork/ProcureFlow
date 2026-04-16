@@ -193,6 +193,10 @@ func (stubRFQHandler) RemoveVendor(w http.ResponseWriter, _ *http.Request) {
 
 type stubQuotationHandler struct{}
 
+func (stubQuotationHandler) Compare(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
 func (stubQuotationHandler) Create(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
@@ -368,6 +372,35 @@ func TestNewProtectsAuthenticatedRoutes(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
 	request.Header.Set("Authorization", "Bearer token")
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+	}
+}
+
+func TestNewRoutesQuotationComparison(t *testing.T) {
+	t.Parallel()
+
+	router := New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), stubAuthHandler{}, stubOrganizationHandler{}, stubVendorHandler{}, stubProcurementHandler{}, stubQuotationHandler{}, stubAwardHandler{}, stubActivityLogHandler{}, stubRFQHandler{}, httpmiddleware.RequireAuthentication(fakeTokenVerifier{
+		verifyFn: func(token string) (domainidentity.Claims, error) {
+			if token != "token" {
+				t.Fatalf("unexpected token: %s", token)
+			}
+
+			return domainidentity.Claims{UserID: uuid.New()}, nil
+		},
+	}), "X-Tenant-ID")
+
+	organizationID := uuid.New()
+	rfqID := uuid.New()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/organizations/"+organizationID.String()+"/rfqs/"+rfqID.String()+"/comparison", nil)
+	request.Header.Set("Authorization", "Bearer token")
+	request.Header.Set("X-Tenant-ID", organizationID.String())
 	recorder := httptest.NewRecorder()
 
 	router.ServeHTTP(recorder, request)
