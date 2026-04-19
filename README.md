@@ -1,6 +1,6 @@
-# ProcureFlow Backend
+# ProcureFlow
 
-ProcureFlow is a Go backend for a multi-tenant procurement workflow. This repository starts with a clean-architecture scaffold so core business rules can evolve independently from transport, persistence, and framework details.
+ProcureFlow is a multi-tenant procurement workflow platform. The backend is a Go service with a clean-architecture scaffold, and the frontend lives in a separate Vite/React app under `web/`.
 
 ## Initial architecture
 
@@ -22,7 +22,8 @@ The project is organized around four boundaries:
 ├── internal/bootstrap
 ├── internal/domain
 ├── internal/infrastructure
-└── internal/interfaces
+├── internal/interfaces
+└── web
 ```
 
 ## Running locally
@@ -47,6 +48,32 @@ Health check:
 ```bash
 curl http://localhost:8080/healthz
 ```
+
+## Frontend
+
+The frontend is a root-level app in `web/` so it can evolve alongside the Go backend without changing the backend package layout.
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Default frontend settings:
+
+- Vite dev server: `http://localhost:5173`
+- API base URL: `VITE_API_BASE_URL=http://localhost:8080`
+
+The frontend API wrapper sends bearer tokens returned by `/api/v1/auth/login` or `/api/v1/auth/register`, and organization-scoped calls include the selected organization ID in `X-Tenant-ID`.
+
+Generate TypeScript API types from the backend OpenAPI document:
+
+```bash
+cd web
+npm run generate:api
+```
+
+The generated output is written to `web/src/shared/api/generated/schema.ts`.
 
 API documentation:
 
