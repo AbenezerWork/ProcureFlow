@@ -45,6 +45,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     if (!token) {
       setOrganizations([]);
       setActiveOrganizationId(null);
+      window.localStorage.removeItem(activeOrganizationStorageKey);
       return;
     }
 
@@ -54,23 +55,33 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       const response = await api.listOrganizations(token);
       setOrganizations(response.organizations);
 
-      const active = response.organizations.find(
-        (entry) => entry.organization.id === activeOrganizationId,
-      );
-      const firstActive =
-        response.organizations.find((entry) => entry.status === "active") ??
-        response.organizations[0] ??
-        null;
+      setActiveOrganizationId((currentOrganizationId) => {
+        const active = response.organizations.find(
+          (entry) => entry.organization.id === currentOrganizationId,
+        );
+        if (active) {
+          return currentOrganizationId;
+        }
 
-      if (!active && firstActive) {
-        selectOrganization(firstActive.organization.id);
-      }
+        const firstActive =
+          response.organizations.find((entry) => entry.status === "active") ??
+          response.organizations[0] ??
+          null;
+
+        if (!firstActive) {
+          window.localStorage.removeItem(activeOrganizationStorageKey);
+          return null;
+        }
+
+        window.localStorage.setItem(activeOrganizationStorageKey, firstActive.organization.id);
+        return firstActive.organization.id;
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load organizations");
     } finally {
       setIsLoading(false);
     }
-  }, [activeOrganizationId, selectOrganization, token]);
+  }, [token]);
 
   const createOrganization = useCallback(
     async (input: { name: string; slug?: string }) => {

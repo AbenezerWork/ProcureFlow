@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 
 import { useAuth } from "@/features/auth/auth-context";
 import { useOrganization } from "@/features/organizations/organization-context";
@@ -21,18 +21,15 @@ export function MembersPage() {
       (await api.listMemberships(token, organizationId)).memberships,
     [],
   );
-  const { data, isLoading, error } = useTenantResource<OrganizationMember[]>(loader);
+  const { data, isLoading, error, reload } = useTenantResource<OrganizationMember[]>(loader);
   const [actionError, setActionError] = useState<string | null>(null);
   const members = data ?? [];
-
-  const reload = useCallback(() => {
-    window.location.reload();
-  }, []);
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!token || !activeOrganizationId) return;
-    const formData = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
     setActionError(null);
     try {
       await api.createMembership(token, activeOrganizationId, {
@@ -41,8 +38,8 @@ export function MembersPage() {
         role: formString(formData, "role") ?? "viewer",
         status: formString(formData, "status"),
       });
-      event.currentTarget.reset();
-      reload();
+      form.reset();
+      await reload();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Unable to create membership");
     }
@@ -58,7 +55,7 @@ export function MembersPage() {
         role: formString(formData, "role"),
         status: formString(formData, "status"),
       });
-      reload();
+      await reload();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Unable to update membership");
     }

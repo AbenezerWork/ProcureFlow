@@ -26,6 +26,12 @@ type Migrator struct {
 	fs   fs.FS
 }
 
+type MigrationResult struct {
+	Applied        []migrationFile
+	CurrentVersion int64
+	TargetVersion  int64
+}
+
 type migrationFile struct {
 	version int64
 	name    string
@@ -39,19 +45,24 @@ func NewMigrator(pool *pgxpool.Pool) *Migrator {
 	}
 }
 
-func (m *Migrator) Up(ctx context.Context) error {
+func (m *Migrator) Up(ctx context.Context) (MigrationResult, error) {
 	if err := m.ensureMigrationsTable(ctx); err != nil {
-		return err
+		return MigrationResult{}, err
 	}
 
 	migrations, err := collectUpMigrations(m.fs)
 	if err != nil {
-		return err
+		return MigrationResult{}, err
 	}
 
 	appliedVersions, err := m.appliedVersions(ctx)
 	if err != nil {
-		return err
+		return MigrationResult{}, err
+	}
+
+	result := MigrationResult{
+		CurrentVersion: highestAppliedVersion(appliedVersions),
+		TargetVersion:  latestMigrationVersion(migrations),
 	}
 
 	for _, migration := range migrations {
@@ -60,11 +71,14 @@ func (m *Migrator) Up(ctx context.Context) error {
 		}
 
 		if err := m.applyMigration(ctx, migration); err != nil {
-			return err
+			return MigrationResult{}, err
 		}
+
+		result.Applied = append(result.Applied, migration)
+		result.CurrentVersion = migration.version
 	}
 
-	return nil
+	return result, nil
 }
 
 func (m *Migrator) Version(ctx context.Context) (int64, error) {
@@ -180,6 +194,28 @@ func collectUpMigrations(fsys fs.FS) ([]migrationFile, error) {
 	})
 
 	return migrations, nil
+}
+
+func highestAppliedVersion(versions map[int64]struct{}) int64 {
+	var highest int64
+	for version := range versions {
+		if version > highest {
+			highest = version
+		}
+	}
+
+	return highest
+}
+
+func latestMigrationVersion(migrations []migrationFile) int64 {
+	var latest int64
+	for _, migration := range migrations {
+		if migration.version > latest {
+			latest = migration.version
+		}
+	}
+
+	return latest
 }
 
 func parseMigrationFileName(name string) (int64, string, error) {

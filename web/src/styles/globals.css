@@ -480,6 +480,13 @@ tbody tr:hover {
   gap: 10px;
 }
 
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: max-content;
+}
+
 .link-button {
   display: inline-flex;
   align-items: center;

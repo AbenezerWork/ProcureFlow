@@ -25,14 +25,15 @@ export function OrganizationsPage() {
     setFormError(null);
     setIsSubmitting(true);
 
-    const formData = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
 
     try {
       await createOrganization({
         name: String(formData.get("name") ?? ""),
         slug: String(formData.get("slug") ?? "") || undefined,
       });
-      event.currentTarget.reset();
+      form.reset();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Unable to create organization");
     } finally {

@@ -44,3 +44,25 @@ func TestStripTransactionWrapper(t *testing.T) {
 		t.Fatalf("expected %q, got %q", want, got)
 	}
 }
+
+func TestMigrationVersionHelpers(t *testing.T) {
+	t.Parallel()
+
+	applied := map[int64]struct{}{
+		1: {},
+		3: {},
+		2: {},
+	}
+	if got := highestAppliedVersion(applied); got != 3 {
+		t.Fatalf("expected highest applied version 3, got %d", got)
+	}
+
+	migrations := []migrationFile{
+		{version: 1},
+		{version: 4},
+		{version: 2},
+	}
+	if got := latestMigrationVersion(migrations); got != 4 {
+		t.Fatalf("expected latest migration version 4, got %d", got)
+	}
+}

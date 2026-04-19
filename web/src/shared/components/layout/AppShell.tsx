@@ -1,6 +1,8 @@
 import { NavLink, Outlet } from "react-router-dom";
 
 import { useAuth } from "@/features/auth/auth-context";
+import { useOrganization } from "@/features/organizations/organization-context";
+import { canAccessApprovals } from "@/shared/lib/permissions";
 import { initials } from "@/shared/lib/format";
 import { OrganizationSwitcher } from "@/shared/components/layout/OrganizationSwitcher";
 
@@ -19,6 +21,11 @@ const navItems = [
 
 export function AppShell() {
   const { user, logout } = useAuth();
+  const { activeOrganization } = useOrganization();
+  const activeRole = activeOrganization?.role ?? null;
+  const visibleNavItems = navItems.filter(
+    (item) => item.to !== "/app/approvals" || canAccessApprovals(activeRole),
+  );
 
   return (
     <div className="app-shell">
@@ -32,7 +39,7 @@ export function AppShell() {
         </div>
 
         <nav className="sidebar-nav" aria-label="Primary navigation">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <NavLink key={item.to} to={item.to}>
               {item.label}
             </NavLink>

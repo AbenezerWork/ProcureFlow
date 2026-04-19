@@ -33,7 +33,7 @@ func openTestStore(t *testing.T) (*database.Store, func()) {
 		t.Fatalf("ping test database: %v", err)
 	}
 
-	if err := database.NewMigrator(pool).Up(ctx); err != nil {
+	if _, err := database.NewMigrator(pool).Up(ctx); err != nil {
 		pool.Close()
 		t.Fatalf("apply migrations: %v", err)
 	}

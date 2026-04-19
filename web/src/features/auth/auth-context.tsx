@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { api } from "@/shared/api/client";
@@ -23,6 +23,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(() => loadStoredSession());
+  const validatedTokenRef = useRef<string | null>(null);
 
   const saveSession = useCallback((nextSession: Session) => {
     storeSession(nextSession);
@@ -52,8 +53,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!accessToken) {
+      validatedTokenRef.current = null;
       return;
     }
+    if (validatedTokenRef.current === accessToken) {
+      return;
+    }
+    validatedTokenRef.current = accessToken;
 
     let cancelled = false;
     async function refreshUser() {

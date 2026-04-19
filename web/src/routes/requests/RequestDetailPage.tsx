@@ -56,7 +56,8 @@ export function RequestDetailPage() {
   async function handleUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!tenant || !request) return;
-    const formData = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
     await mutate(() =>
       api.updateProcurementRequest(
         tenant.token,
@@ -76,7 +77,8 @@ export function RequestDetailPage() {
   async function handleCreateItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!tenant || !request) return;
-    const formData = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
     setError(null);
     try {
       await api.createProcurementRequestItem(tenant.token, tenant.tenantId, request.id, {
@@ -87,7 +89,7 @@ export function RequestDetailPage() {
         estimated_unit_price: formString(formData, "estimated_unit_price"),
         needed_by_date: formString(formData, "needed_by_date"),
       });
-      event.currentTarget.reset();
+      form.reset();
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to add item");

@@ -51,7 +51,8 @@ export function RFQDetailPage() {
   async function handleUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!tenant || !rfq) return;
-    const formData = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
     setError(null);
     try {
       setRFQ(
@@ -86,11 +87,12 @@ export function RFQDetailPage() {
   async function attachVendor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!tenant || !rfq) return;
-    const formData = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
     setError(null);
     try {
       await api.attachRFQVendor(tenant.token, tenant.tenantId, rfq.id, formString(formData, "vendor_id") ?? "");
-      event.currentTarget.reset();
+      form.reset();
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to attach vendor");
