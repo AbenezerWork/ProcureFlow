@@ -1,14 +1,21 @@
 import type {
   ActivityLog,
+  Award,
   ApiList,
+  Health,
   ID,
   OrganizationMember,
   Organization,
+  ProcurementItem,
   ProcurementRequest,
   ProcurementRequestStatus,
   Quotation,
+  QuotationItem,
   RFQ,
+  RFQItem,
   RFQStatus,
+  RFQQuotationComparison,
+  RFQVendor,
   Session,
   User,
   UserOrganization,
@@ -96,6 +103,10 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
 }
 
 export const api = {
+  health(tenantId?: string | null) {
+    return request<Health>("/healthz", { tenantId });
+  },
+
   login(input: { email: string; password: string }) {
     return request<Session>("/api/v1/auth/login", {
       method: "POST",
@@ -129,11 +140,106 @@ export const api = {
     );
   },
 
+  getOrganization(token: string, tenantId: ID) {
+    return request<{ organization: Organization; membership: unknown }>(
+      `/api/v1/organizations/${tenantId}`,
+      { token, tenantId },
+    );
+  },
+
+  updateOrganization(token: string, tenantId: ID, input: { name?: string; slug?: string }) {
+    return request<{ organization: Organization; membership: unknown }>(
+      `/api/v1/organizations/${tenantId}`,
+      {
+        method: "PATCH",
+        token,
+        tenantId,
+        body: input,
+      },
+    );
+  },
+
+  transferOrganizationOwnership(
+    token: string,
+    tenantId: ID,
+    input: { target_user_id: ID; current_owner_new_role?: string },
+  ) {
+    return request<unknown>(`/api/v1/organizations/${tenantId}/ownership-transfer`, {
+      method: "POST",
+      token,
+      tenantId,
+      body: input,
+    });
+  },
+
   listMemberships(token: string, tenantId: ID) {
     return request<ApiList<OrganizationMember, "memberships">>(
       `/api/v1/organizations/${tenantId}/memberships`,
       { token, tenantId },
     );
+  },
+
+  createMembership(
+    token: string,
+    tenantId: ID,
+    input: { user_id?: ID; email?: string; role: string; status?: string },
+  ) {
+    return request<OrganizationMember>(`/api/v1/organizations/${tenantId}/memberships`, {
+      method: "POST",
+      token,
+      tenantId,
+      body: input,
+    });
+  },
+
+  updateMembership(
+    token: string,
+    tenantId: ID,
+    userId: ID,
+    input: { role?: string; status?: string },
+  ) {
+    return request<OrganizationMember>(
+      `/api/v1/organizations/${tenantId}/memberships/${userId}`,
+      {
+        method: "PATCH",
+        token,
+        tenantId,
+        body: input,
+      },
+    );
+  },
+
+  createVendor(token: string, tenantId: ID, input: Record<string, string>) {
+    return request<Vendor>(`/api/v1/organizations/${tenantId}/vendors`, {
+      method: "POST",
+      token,
+      tenantId,
+      body: input,
+    });
+  },
+
+  getVendor(token: string, tenantId: ID, vendorId: ID) {
+    return request<Vendor>(`/api/v1/organizations/${tenantId}/vendors/${vendorId}`, {
+      token,
+      tenantId,
+    });
+  },
+
+  updateVendor(token: string, tenantId: ID, vendorId: ID, input: Record<string, string>) {
+    return request<Vendor>(`/api/v1/organizations/${tenantId}/vendors/${vendorId}`, {
+      method: "PATCH",
+      token,
+      tenantId,
+      body: input,
+    });
+  },
+
+  archiveVendor(token: string, tenantId: ID, vendorId: ID) {
+    return request<Vendor>(`/api/v1/organizations/${tenantId}/vendors/${vendorId}/archive`, {
+      method: "POST",
+      token,
+      tenantId,
+    });
   },
 
   listProcurementRequests(
@@ -144,6 +250,126 @@ export const api = {
     return request<ApiList<ProcurementRequest, "procurement_requests">>(
       `/api/v1/organizations/${tenantId}/procurement-requests`,
       { token, tenantId, query: { status } },
+    );
+  },
+
+  createProcurementRequest(
+    token: string,
+    tenantId: ID,
+    input: {
+      title: string;
+      description?: string;
+      justification?: string;
+      currency_code?: string;
+      estimated_total_amount?: string;
+    },
+  ) {
+    return request<ProcurementRequest>(
+      `/api/v1/organizations/${tenantId}/procurement-requests`,
+      {
+        method: "POST",
+        token,
+        tenantId,
+        body: input,
+      },
+    );
+  },
+
+  getProcurementRequest(token: string, tenantId: ID, requestId: ID) {
+    return request<ProcurementRequest>(
+      `/api/v1/organizations/${tenantId}/procurement-requests/${requestId}`,
+      { token, tenantId },
+    );
+  },
+
+  updateProcurementRequest(
+    token: string,
+    tenantId: ID,
+    requestId: ID,
+    input: Partial<Pick<ProcurementRequest, "title" | "description" | "justification" | "currency_code" | "estimated_total_amount">>,
+  ) {
+    return request<ProcurementRequest>(
+      `/api/v1/organizations/${tenantId}/procurement-requests/${requestId}`,
+      {
+        method: "PATCH",
+        token,
+        tenantId,
+        body: input,
+      },
+    );
+  },
+
+  submitProcurementRequest(token: string, tenantId: ID, requestId: ID) {
+    return request<ProcurementRequest>(
+      `/api/v1/organizations/${tenantId}/procurement-requests/${requestId}/submit`,
+      { method: "POST", token, tenantId },
+    );
+  },
+
+  approveProcurementRequest(token: string, tenantId: ID, requestId: ID, decision_comment?: string) {
+    return request<ProcurementRequest>(
+      `/api/v1/organizations/${tenantId}/procurement-requests/${requestId}/approve`,
+      { method: "POST", token, tenantId, body: { decision_comment } },
+    );
+  },
+
+  rejectProcurementRequest(token: string, tenantId: ID, requestId: ID, decision_comment?: string) {
+    return request<ProcurementRequest>(
+      `/api/v1/organizations/${tenantId}/procurement-requests/${requestId}/reject`,
+      { method: "POST", token, tenantId, body: { decision_comment } },
+    );
+  },
+
+  cancelProcurementRequest(token: string, tenantId: ID, requestId: ID) {
+    return request<ProcurementRequest>(
+      `/api/v1/organizations/${tenantId}/procurement-requests/${requestId}/cancel`,
+      { method: "POST", token, tenantId },
+    );
+  },
+
+  listProcurementRequestItems(token: string, tenantId: ID, requestId: ID) {
+    return request<ApiList<ProcurementItem, "items">>(
+      `/api/v1/organizations/${tenantId}/procurement-requests/${requestId}/items`,
+      { token, tenantId },
+    );
+  },
+
+  createProcurementRequestItem(
+    token: string,
+    tenantId: ID,
+    requestId: ID,
+    input: {
+      item_name: string;
+      description?: string;
+      quantity: string;
+      unit: string;
+      estimated_unit_price?: string;
+      needed_by_date?: string;
+    },
+  ) {
+    return request<ProcurementItem>(
+      `/api/v1/organizations/${tenantId}/procurement-requests/${requestId}/items`,
+      { method: "POST", token, tenantId, body: input },
+    );
+  },
+
+  updateProcurementRequestItem(
+    token: string,
+    tenantId: ID,
+    requestId: ID,
+    itemId: ID,
+    input: Partial<Pick<ProcurementItem, "item_name" | "description" | "quantity" | "unit" | "estimated_unit_price" | "needed_by_date">>,
+  ) {
+    return request<ProcurementItem>(
+      `/api/v1/organizations/${tenantId}/procurement-requests/${requestId}/items/${itemId}`,
+      { method: "PATCH", token, tenantId, body: input },
+    );
+  },
+
+  deleteProcurementRequestItem(token: string, tenantId: ID, requestId: ID, itemId: ID) {
+    return request<null>(
+      `/api/v1/organizations/${tenantId}/procurement-requests/${requestId}/items/${itemId}`,
+      { method: "DELETE", token, tenantId },
     );
   },
 
@@ -162,6 +388,81 @@ export const api = {
     });
   },
 
+  createRFQ(
+    token: string,
+    tenantId: ID,
+    input: { procurement_request_id: ID; reference_number?: string; title?: string; description?: string },
+  ) {
+    return request<RFQ>(`/api/v1/organizations/${tenantId}/rfqs`, {
+      method: "POST",
+      token,
+      tenantId,
+      body: input,
+    });
+  },
+
+  getRFQ(token: string, tenantId: ID, rfqId: ID) {
+    return request<RFQ>(`/api/v1/organizations/${tenantId}/rfqs/${rfqId}`, {
+      token,
+      tenantId,
+    });
+  },
+
+  updateRFQ(token: string, tenantId: ID, rfqId: ID, input: { reference_number?: string; title?: string; description?: string }) {
+    return request<RFQ>(`/api/v1/organizations/${tenantId}/rfqs/${rfqId}`, {
+      method: "PATCH",
+      token,
+      tenantId,
+      body: input,
+    });
+  },
+
+  transitionRFQ(token: string, tenantId: ID, rfqId: ID, action: "publish" | "close" | "evaluate" | "cancel") {
+    return request<RFQ>(`/api/v1/organizations/${tenantId}/rfqs/${rfqId}/${action}`, {
+      method: "POST",
+      token,
+      tenantId,
+    });
+  },
+
+  listRFQItems(token: string, tenantId: ID, rfqId: ID) {
+    return request<ApiList<RFQItem, "items">>(`/api/v1/organizations/${tenantId}/rfqs/${rfqId}/items`, {
+      token,
+      tenantId,
+    });
+  },
+
+  listRFQVendors(token: string, tenantId: ID, rfqId: ID) {
+    return request<ApiList<RFQVendor, "vendors">>(`/api/v1/organizations/${tenantId}/rfqs/${rfqId}/vendors`, {
+      token,
+      tenantId,
+    });
+  },
+
+  attachRFQVendor(token: string, tenantId: ID, rfqId: ID, vendor_id: ID) {
+    return request<RFQVendor>(`/api/v1/organizations/${tenantId}/rfqs/${rfqId}/vendors`, {
+      method: "POST",
+      token,
+      tenantId,
+      body: { vendor_id },
+    });
+  },
+
+  removeRFQVendor(token: string, tenantId: ID, rfqId: ID, vendorId: ID) {
+    return request<null>(`/api/v1/organizations/${tenantId}/rfqs/${rfqId}/vendors/${vendorId}`, {
+      method: "DELETE",
+      token,
+      tenantId,
+    });
+  },
+
+  compareRFQQuotations(token: string, tenantId: ID, rfqId: ID) {
+    return request<RFQQuotationComparison>(
+      `/api/v1/organizations/${tenantId}/rfqs/${rfqId}/comparison`,
+      { token, tenantId },
+    );
+  },
+
   listVendors(token: string, tenantId: ID) {
     return request<ApiList<Vendor, "vendors">>(`/api/v1/organizations/${tenantId}/vendors`, {
       token,
@@ -174,6 +475,91 @@ export const api = {
       `/api/v1/organizations/${tenantId}/rfqs/${rfqId}/quotations`,
       { token, tenantId },
     );
+  },
+
+  createQuotation(
+    token: string,
+    tenantId: ID,
+    rfqId: ID,
+    input: { rfq_vendor_id: ID; currency_code?: string; lead_time_days?: number; payment_terms?: string; notes?: string },
+  ) {
+    return request<Quotation>(`/api/v1/organizations/${tenantId}/rfqs/${rfqId}/quotations`, {
+      method: "POST",
+      token,
+      tenantId,
+      body: input,
+    });
+  },
+
+  getQuotation(token: string, tenantId: ID, rfqId: ID, quotationId: ID) {
+    return request<Quotation>(
+      `/api/v1/organizations/${tenantId}/rfqs/${rfqId}/quotations/${quotationId}`,
+      { token, tenantId },
+    );
+  },
+
+  updateQuotation(
+    token: string,
+    tenantId: ID,
+    rfqId: ID,
+    quotationId: ID,
+    input: { currency_code?: string; lead_time_days?: number; payment_terms?: string; notes?: string },
+  ) {
+    return request<Quotation>(
+      `/api/v1/organizations/${tenantId}/rfqs/${rfqId}/quotations/${quotationId}`,
+      { method: "PATCH", token, tenantId, body: input },
+    );
+  },
+
+  submitQuotation(token: string, tenantId: ID, rfqId: ID, quotationId: ID) {
+    return request<Quotation>(
+      `/api/v1/organizations/${tenantId}/rfqs/${rfqId}/quotations/${quotationId}/submit`,
+      { method: "POST", token, tenantId },
+    );
+  },
+
+  rejectQuotation(token: string, tenantId: ID, rfqId: ID, quotationId: ID, rejection_reason?: string) {
+    return request<Quotation>(
+      `/api/v1/organizations/${tenantId}/rfqs/${rfqId}/quotations/${quotationId}/reject`,
+      { method: "POST", token, tenantId, body: { rejection_reason } },
+    );
+  },
+
+  listQuotationItems(token: string, tenantId: ID, rfqId: ID, quotationId: ID) {
+    return request<ApiList<QuotationItem, "items">>(
+      `/api/v1/organizations/${tenantId}/rfqs/${rfqId}/quotations/${quotationId}/items`,
+      { token, tenantId },
+    );
+  },
+
+  updateQuotationItem(
+    token: string,
+    tenantId: ID,
+    rfqId: ID,
+    quotationId: ID,
+    itemId: ID,
+    input: { unit_price?: string; delivery_days?: number; notes?: string },
+  ) {
+    return request<QuotationItem>(
+      `/api/v1/organizations/${tenantId}/rfqs/${rfqId}/quotations/${quotationId}/items/${itemId}`,
+      { method: "PATCH", token, tenantId, body: input },
+    );
+  },
+
+  getAward(token: string, tenantId: ID, rfqId: ID) {
+    return request<Award>(`/api/v1/organizations/${tenantId}/rfqs/${rfqId}/award`, {
+      token,
+      tenantId,
+    });
+  },
+
+  createAward(token: string, tenantId: ID, rfqId: ID, input: { quotation_id: ID; reason: string }) {
+    return request<Award>(`/api/v1/organizations/${tenantId}/rfqs/${rfqId}/award`, {
+      method: "POST",
+      token,
+      tenantId,
+      body: input,
+    });
   },
 
   listActivityLogs(token: string, tenantId: ID, entityType: string, entityId: ID) {

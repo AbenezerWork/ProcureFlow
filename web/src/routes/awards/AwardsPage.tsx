@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 
 import { api } from "@/shared/api/client";
 import { DataTable } from "@/shared/components/ui/DataTable";
@@ -38,7 +39,7 @@ export function AwardsPage() {
           getRowKey={(row) => row.id}
           emptyLabel="No RFQs have been awarded yet."
           columns={[
-            { key: "title", header: "RFQ", render: (row) => row.title },
+            { key: "title", header: "RFQ", render: (row) => <Link to={`/app/rfqs/${row.id}/award`}>{row.title}</Link> },
             { key: "reference", header: "Reference", render: (row) => row.reference_number ?? "Not set" },
             { key: "status", header: "Status", render: (row) => <StatusBadge status={row.status} /> },
             { key: "updated", header: "Updated", render: (row) => formatDateTime(row.updated_at) },

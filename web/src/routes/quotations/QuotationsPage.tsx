@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { useAuth } from "@/features/auth/auth-context";
 import { useOrganization } from "@/features/organizations/organization-context";
@@ -88,6 +89,7 @@ export function QuotationsPage() {
             { key: "currency", header: "Currency", render: (row) => row.currency_code },
             { key: "lead", header: "Lead time", render: (row) => row.lead_time_days ?? "Not set" },
             { key: "updated", header: "Updated", render: (row) => formatDateTime(row.updated_at) },
+            { key: "actions", header: "Actions", render: (row) => <Link to={`/app/rfqs/${row.rfq_id}/quotations/${row.id}`}>Open</Link> },
           ]}
         />
         {isLoading ? <p className="empty-copy">Loading quotations</p> : null}

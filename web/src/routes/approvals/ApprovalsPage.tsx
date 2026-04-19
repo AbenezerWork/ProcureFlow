@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 
 import { api } from "@/shared/api/client";
 import { DataTable } from "@/shared/components/ui/DataTable";
@@ -38,7 +39,7 @@ export function ApprovalsPage() {
           getRowKey={(row) => row.id}
           emptyLabel="No submitted requests are waiting for approval."
           columns={[
-            { key: "title", header: "Request", render: (row) => row.title },
+            { key: "title", header: "Request", render: (row) => <Link to={`/app/requests/${row.id}`}>{row.title}</Link> },
             {
               key: "amount",
               header: "Estimate",

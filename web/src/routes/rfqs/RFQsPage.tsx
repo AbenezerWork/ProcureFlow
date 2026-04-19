@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 
 import { api } from "@/shared/api/client";
 import { DataTable } from "@/shared/components/ui/DataTable";
@@ -24,6 +25,7 @@ export function RFQsPage() {
         eyebrow="Sourcing"
         title="RFQs"
         description="Create RFQs from approved requests, attach vendors, publish, compare, and award."
+        action={<Link className="button button-primary link-button" to="/app/rfqs/new">New RFQ</Link>}
       />
 
       {error ? <Notice title="Unable to load RFQs" tone="danger">{error}</Notice> : null}
@@ -38,7 +40,7 @@ export function RFQsPage() {
           getRowKey={(row) => row.id}
           emptyLabel="No RFQs have been created for this organization."
           columns={[
-            { key: "title", header: "Title", render: (row) => row.title },
+            { key: "title", header: "Title", render: (row) => <Link to={`/app/rfqs/${row.id}`}>{row.title}</Link> },
             { key: "reference", header: "Reference", render: (row) => row.reference_number ?? "Not set" },
             { key: "status", header: "Status", render: (row) => <StatusBadge status={row.status} /> },
             { key: "updated", header: "Updated", render: (row) => formatDateTime(row.updated_at) },

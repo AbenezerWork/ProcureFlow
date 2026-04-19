@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 
 import { api } from "@/shared/api/client";
 import { DataTable } from "@/shared/components/ui/DataTable";
@@ -24,6 +25,7 @@ export function VendorsPage() {
         eyebrow="Supplier base"
         title="Vendors"
         description="Manage vendor records that can be attached to sourcing events."
+        action={<Link className="button button-primary link-button" to="/app/vendors/new">New vendor</Link>}
       />
 
       {error ? <Notice title="Unable to load vendors" tone="danger">{error}</Notice> : null}
@@ -38,7 +40,7 @@ export function VendorsPage() {
           getRowKey={(row) => row.id}
           emptyLabel="No vendors have been added for this organization."
           columns={[
-            { key: "name", header: "Vendor", render: (row) => row.name },
+            { key: "name", header: "Vendor", render: (row) => <Link to={`/app/vendors/${row.id}`}>{row.name}</Link> },
             { key: "contact", header: "Contact", render: (row) => row.contact_name ?? "Not set" },
             { key: "email", header: "Email", render: (row) => row.email ?? "Not set" },
             { key: "status", header: "Status", render: (row) => <StatusBadge status={row.status} /> },

@@ -454,13 +454,63 @@ tbody tr:hover {
   gap: 14px;
 }
 
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .form-stack label,
+.form-grid label,
 .inline-control {
   display: grid;
   gap: 7px;
   color: var(--muted);
   font-size: 0.82rem;
   font-weight: 800;
+}
+
+.wide-field {
+  grid-column: 1 / -1;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.inline-edit {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) minmax(80px, 0.8fr) minmax(110px, 1fr) auto;
+  gap: 8px;
+  min-width: 520px;
+}
+
+.request-item-edit {
+  grid-template-columns: minmax(120px, 1fr) 90px 80px 120px 140px auto auto;
+  min-width: 820px;
+}
+
+.inline-edit input,
+.inline-edit select {
+  min-height: 34px;
+}
+
+.comparison-item {
+  align-items: flex-start;
+}
+
+.comparison-prices {
+  display: grid;
+  gap: 6px;
+  text-align: right;
 }
 
 .inline-control {
@@ -654,5 +704,14 @@ tbody tr:hover {
   .detail-list div {
     grid-template-columns: 1fr;
     gap: 4px;
+  }
+
+  .form-grid,
+  .inline-edit {
+    grid-template-columns: 1fr;
+  }
+
+  .form-actions {
+    justify-content: stretch;
   }
 }

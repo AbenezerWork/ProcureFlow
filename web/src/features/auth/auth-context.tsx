@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
 import { api } from "@/shared/api/client";
@@ -48,17 +48,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
   }, []);
 
+  const accessToken = session?.access_token ?? null;
+
+  useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+
+    let cancelled = false;
+    async function refreshUser() {
+      try {
+        const user = await api.currentUser(accessToken!);
+        if (!cancelled) {
+          setSession((current) => (current ? { ...current, user } : current));
+        }
+      } catch {
+        if (!cancelled) {
+          logout();
+        }
+      }
+    }
+
+    void refreshUser();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, logout]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
       user: session?.user ?? null,
-      token: session?.access_token ?? null,
+      token: accessToken,
       isAuthenticated: Boolean(session?.access_token),
       login,
       register,
       logout,
     }),
-    [login, logout, register, session],
+    [accessToken, login, logout, register, session],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

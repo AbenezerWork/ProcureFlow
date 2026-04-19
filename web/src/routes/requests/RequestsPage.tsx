@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 
 import { api } from "@/shared/api/client";
 import { DataTable } from "@/shared/components/ui/DataTable";
@@ -24,6 +25,7 @@ export function RequestsPage() {
         eyebrow="Demand intake"
         title="Procurement requests"
         description="Draft, submit, review, and track internal purchasing demand."
+        action={<Link className="button button-primary link-button" to="/app/requests/new">New request</Link>}
       />
 
       {error ? <Notice title="Unable to load requests" tone="danger">{error}</Notice> : null}
@@ -38,7 +40,7 @@ export function RequestsPage() {
           getRowKey={(row) => row.id}
           emptyLabel="No procurement requests are available for this organization."
           columns={[
-            { key: "title", header: "Title", render: (row) => row.title },
+            { key: "title", header: "Title", render: (row) => <Link to={`/app/requests/${row.id}`}>{row.title}</Link> },
             { key: "status", header: "Status", render: (row) => <StatusBadge status={row.status} /> },
             {
               key: "amount",

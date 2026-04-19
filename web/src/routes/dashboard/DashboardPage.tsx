@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 
 import { api } from "@/shared/api/client";
 import { Notice } from "@/shared/components/ui/Notice";
@@ -7,23 +8,25 @@ import { StatusBadge } from "@/shared/components/ui/StatusBadge";
 import { DataTable } from "@/shared/components/ui/DataTable";
 import { formatAmount, formatDateTime } from "@/shared/lib/format";
 import { useTenantResource } from "@/shared/hooks/useTenantResource";
-import type { ProcurementRequest, RFQ, Vendor } from "@/shared/types/api";
+import type { Health, ProcurementRequest, RFQ, Vendor } from "@/shared/types/api";
 
 type DashboardData = {
   requests: ProcurementRequest[];
   approvals: ProcurementRequest[];
   rfqs: RFQ[];
   vendors: Vendor[];
+  health: Health;
 };
 
 export function DashboardPage() {
   const loader = useMemo(
     () => async (token: string, organizationId: string): Promise<DashboardData> => {
-      const [requests, approvals, rfqs, vendors] = await Promise.all([
+      const [requests, approvals, rfqs, vendors, health] = await Promise.all([
         api.listProcurementRequests(token, organizationId),
         api.listApprovalInbox(token, organizationId),
         api.listRFQs(token, organizationId),
         api.listVendors(token, organizationId),
+        api.health(organizationId),
       ]);
 
       return {
@@ -31,6 +34,7 @@ export function DashboardPage() {
         approvals: approvals.procurement_requests,
         rfqs: rfqs.rfqs,
         vendors: vendors.vendors,
+        health,
       };
     },
     [],
@@ -60,6 +64,12 @@ export function DashboardPage() {
         <Metric label="Active vendors" value={vendors.filter((item) => item.status === "active").length} />
       </section>
 
+      {data?.health ? (
+        <Notice title={`API ${data.health.status}`}>
+          {data.health.name} · {data.health.environment} · {data.health.version}
+        </Notice>
+      ) : null}
+
       <section className="content-grid">
         <div className="panel span-8">
           <div className="panel-heading">
@@ -71,7 +81,7 @@ export function DashboardPage() {
             getRowKey={(row) => row.id}
             emptyLabel="No submitted requests are awaiting approval."
             columns={[
-              { key: "title", header: "Request", render: (row) => row.title },
+              { key: "title", header: "Request", render: (row) => <Link to={`/app/requests/${row.id}`}>{row.title}</Link> },
               {
                 key: "amount",
                 header: "Estimate",
@@ -92,7 +102,7 @@ export function DashboardPage() {
             {rfqs.slice(0, 5).map((rfq) => (
               <article key={rfq.id} className="stack-list-item">
                 <div>
-                  <strong>{rfq.title}</strong>
+                  <Link to={`/app/rfqs/${rfq.id}`}><strong>{rfq.title}</strong></Link>
                   <span>{rfq.reference_number ?? "No reference"}</span>
                 </div>
                 <StatusBadge status={rfq.status} />
