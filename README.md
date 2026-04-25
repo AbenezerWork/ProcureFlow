@@ -177,6 +177,30 @@ go run ./cmd/migrate version
 
 The API does not auto-run migrations on startup. Apply them explicitly in local development and CI.
 
+### Demo seed data
+
+For local validation, the migration command can populate a deterministic demo organization after applying migrations:
+
+```bash
+go run ./cmd/migrate up -seed-demo
+```
+
+With Docker Compose:
+
+```bash
+docker compose run --rm migrate up -seed-demo
+```
+
+The seed is idempotent and only manages records with the fixed demo IDs and `demo.*@procureflow.test` accounts. It creates:
+
+- organization: `ProcureFlow Demo Organization`
+- tenant ID: `10000000-0000-4000-8000-000000000001`
+- password for all demo users: `DemoPass123!`
+- active role users: `demo.owner@procureflow.test`, `demo.admin@procureflow.test`, `demo.requester@procureflow.test`, `demo.approver@procureflow.test`, `demo.procurement@procureflow.test`, `demo.viewer@procureflow.test`
+- membership-status users: `demo.invited@procureflow.test`, `demo.suspended@procureflow.test`, `demo.removed@procureflow.test`
+
+The demo organization includes active and archived vendors, procurement requests across every request status, RFQs across every RFQ status, quotations across every quotation status, one award, and activity-log entries for timeline validation.
+
 ## Integration tests
 
 Real PostgreSQL-backed integration tests live under `internal/integration` and are guarded by the `integration` build tag. They are skipped unless `PROCUREFLOW_TEST_DATABASE_URL` is set.

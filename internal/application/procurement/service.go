@@ -392,7 +392,7 @@ func (s Service) SubmitRequest(ctx context.Context, input SubmitRequestInput) (d
 	if err != nil {
 		return domainprocurement.Request{}, err
 	}
-	if !canWriteRequest(membership.Role, request, input.CurrentUser) {
+	if !canFinishDraftRequest(membership.Role, request, input.CurrentUser) {
 		return domainprocurement.Request{}, ErrForbiddenProcurement
 	}
 	if request.Status != domainprocurement.RequestStatusDraft {
@@ -978,7 +978,8 @@ func canCreateRequest(role domainorganization.MembershipRole) bool {
 	case domainorganization.MembershipRoleOwner,
 		domainorganization.MembershipRoleAdmin,
 		domainorganization.MembershipRoleProcurementOfficer,
-		domainorganization.MembershipRoleRequester:
+		domainorganization.MembershipRoleRequester,
+		domainorganization.MembershipRoleApprover:
 		return true
 	default:
 		return false
@@ -1012,7 +1013,21 @@ func canWriteRequest(role domainorganization.MembershipRole, request domainprocu
 		return true
 	}
 
-	return role == domainorganization.MembershipRoleRequester && request.RequesterUserID == currentUser
+	return canFinishDraftRequest(role, request, currentUser)
+}
+
+func canFinishDraftRequest(role domainorganization.MembershipRole, request domainprocurement.Request, currentUser uuid.UUID) bool {
+	if request.RequesterUserID != currentUser {
+		return false
+	}
+
+	switch role {
+	case domainorganization.MembershipRoleRequester,
+		domainorganization.MembershipRoleApprover:
+		return true
+	default:
+		return false
+	}
 }
 
 func isValidRequestStatus(status domainprocurement.RequestStatus) bool {

@@ -1072,7 +1072,7 @@ paths:
     post:
       tags: [Procurement]
       summary: Create a procurement request draft
-      description: Creates a draft procurement request. Active `owner`, `admin`, `procurement_officer`, and `requester` memberships may perform this action.
+      description: Creates a draft procurement request. Active `owner`, `admin`, `procurement_officer`, `requester`, and `approver` memberships may perform this action.
       operationId: createProcurementRequest
       security:
         - bearerAuth: []
@@ -1153,7 +1153,7 @@ paths:
     patch:
       tags: [Procurement]
       summary: Update a draft procurement request
-      description: Updates a draft procurement request. Manager roles or the original requester on their own request may perform this action.
+      description: Updates a draft procurement request. Manager roles, or the original `requester`/`approver` on their own request, may perform this action.
       operationId: updateProcurementRequest
       security:
         - bearerAuth: []
@@ -1202,7 +1202,7 @@ paths:
     post:
       tags: [Procurement]
       summary: Submit a draft procurement request
-      description: Submits a draft procurement request. Manager roles or the original requester on their own request may perform this action.
+      description: Submits a draft procurement request. Only the original draft starter may perform this action, and they must have an active `requester` or `approver` membership.
       operationId: submitProcurementRequest
       security:
         - bearerAuth: []
@@ -1343,7 +1343,7 @@ paths:
     post:
       tags: [Procurement]
       summary: Cancel a procurement request
-      description: Cancels a draft or submitted procurement request. Manager roles or the original requester on their own request may perform this action.
+      description: Cancels a draft or submitted procurement request. Manager roles, or the original `requester`/`approver` on their own request, may perform this action.
       operationId: cancelProcurementRequest
       security:
         - bearerAuth: []
@@ -1424,7 +1424,7 @@ paths:
     post:
       tags: [Procurement]
       summary: Add an item to a draft procurement request
-      description: Adds an item to a draft procurement request. Manager roles or the original requester on their own request may perform this action.
+      description: Adds an item to a draft procurement request. Manager roles, or the original `requester`/`approver` on their own request, may perform this action.
       operationId: createProcurementRequestItem
       security:
         - bearerAuth: []
@@ -1474,7 +1474,7 @@ paths:
     patch:
       tags: [Procurement]
       summary: Update an item on a draft procurement request
-      description: Updates an item on a draft procurement request. Manager roles or the original requester on their own request may perform this action.
+      description: Updates an item on a draft procurement request. Manager roles, or the original `requester`/`approver` on their own request, may perform this action.
       operationId: updateProcurementRequestItem
       security:
         - bearerAuth: []
@@ -1518,7 +1518,7 @@ paths:
     delete:
       tags: [Procurement]
       summary: Delete an item from a draft procurement request
-      description: Deletes an item from a draft procurement request. Manager roles or the original requester on their own request may perform this action.
+      description: Deletes an item from a draft procurement request. Manager roles, or the original `requester`/`approver` on their own request, may perform this action.
       operationId: deleteProcurementRequestItem
       security:
         - bearerAuth: []

@@ -146,6 +146,52 @@ func TestServiceCreateRequest(t *testing.T) {
 	}
 }
 
+func TestServiceCreateRequestAllowsApprover(t *testing.T) {
+	t.Parallel()
+
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	repo := fakeRepository{
+		getMembershipFn: func(_ context.Context, _, _ uuid.UUID) (domainorganization.Membership, error) {
+			return domainorganization.Membership{
+				Role:   domainorganization.MembershipRoleApprover,
+				Status: domainorganization.MembershipStatusActive,
+			}, nil
+		},
+		createRequestFn: func(_ context.Context, params CreateRequestParams) (domainprocurement.Request, error) {
+			if params.RequesterUserID != userID {
+				t.Fatalf("expected approver to be recorded as requester, got %s", params.RequesterUserID)
+			}
+			return domainprocurement.Request{
+				ID:              uuid.New(),
+				OrganizationID:  params.OrganizationID,
+				RequesterUserID: params.RequesterUserID,
+				Title:           params.Title,
+				Status:          domainprocurement.RequestStatusDraft,
+				CurrencyCode:    params.CurrencyCode,
+			}, nil
+		},
+	}
+
+	service := NewService(repo, fakeTxManager{
+		withinFn: func(_ context.Context, fn func(Repository) error) error {
+			return fn(repo)
+		},
+	})
+	created, err := service.CreateRequest(context.Background(), CreateRequestInput{
+		OrganizationID: orgID,
+		CurrentUser:    userID,
+		Title:          "Laptop refresh",
+	})
+	if err != nil {
+		t.Fatalf("create request returned error: %v", err)
+	}
+	if created.RequesterUserID != userID {
+		t.Fatalf("expected requester user id %s, got %s", userID, created.RequesterUserID)
+	}
+}
+
 func TestServiceUpdateRequestRejectsNonOwnerRequester(t *testing.T) {
 	t.Parallel()
 
@@ -462,13 +508,12 @@ func TestServiceRejectRequestRequiresSubmittedStatus(t *testing.T) {
 	}
 }
 
-func TestServiceSubmitRequestAllowsManager(t *testing.T) {
+func TestServiceSubmitRequestRejectsManagerWhoDidNotStartDraft(t *testing.T) {
 	t.Parallel()
 
 	orgID := uuid.New()
 	requestID := uuid.New()
 	currentUser := uuid.New()
-	logged := false
 
 	repo := fakeRepository{
 		getMembershipFn: func(_ context.Context, _, _ uuid.UUID) (domainorganization.Membership, error) {
@@ -482,6 +527,55 @@ func TestServiceSubmitRequestAllowsManager(t *testing.T) {
 				ID:              requestID,
 				OrganizationID:  orgID,
 				RequesterUserID: uuid.New(),
+				Title:           "Existing",
+				Status:          domainprocurement.RequestStatusDraft,
+				CurrencyCode:    "USD",
+			}, nil
+		},
+		submitRequestFn: func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (domainprocurement.Request, error) {
+			t.Fatal("submit should not be called")
+			return domainprocurement.Request{}, nil
+		},
+	}
+
+	service := NewService(repo, fakeTxManager{
+		withinFn: func(_ context.Context, fn func(Repository) error) error {
+			return fn(repo)
+		},
+	})
+	request, err := service.SubmitRequest(context.Background(), SubmitRequestInput{
+		OrganizationID: orgID,
+		RequestID:      requestID,
+		CurrentUser:    currentUser,
+	})
+	if !errors.Is(err, ErrForbiddenProcurement) {
+		t.Fatalf("expected forbidden error, got %v", err)
+	}
+	if request.ID != uuid.Nil {
+		t.Fatalf("expected empty request on forbidden submit, got %#v", request)
+	}
+}
+
+func TestServiceSubmitRequestAllowsRequesterWhoStartedDraft(t *testing.T) {
+	t.Parallel()
+
+	orgID := uuid.New()
+	requestID := uuid.New()
+	currentUser := uuid.New()
+	logged := false
+
+	repo := fakeRepository{
+		getMembershipFn: func(_ context.Context, _, _ uuid.UUID) (domainorganization.Membership, error) {
+			return domainorganization.Membership{
+				Role:   domainorganization.MembershipRoleRequester,
+				Status: domainorganization.MembershipStatusActive,
+			}, nil
+		},
+		getRequestFn: func(_ context.Context, _, _ uuid.UUID) (domainprocurement.Request, error) {
+			return domainprocurement.Request{
+				ID:              requestID,
+				OrganizationID:  orgID,
+				RequesterUserID: currentUser,
 				Title:           "Existing",
 				Status:          domainprocurement.RequestStatusDraft,
 				CurrencyCode:    "USD",
@@ -527,6 +621,60 @@ func TestServiceSubmitRequestAllowsManager(t *testing.T) {
 	}
 	if !logged {
 		t.Fatalf("expected activity log to be written")
+	}
+}
+
+func TestServiceSubmitRequestAllowsApproverWhoStartedDraft(t *testing.T) {
+	t.Parallel()
+
+	orgID := uuid.New()
+	requestID := uuid.New()
+	currentUser := uuid.New()
+
+	repo := fakeRepository{
+		getMembershipFn: func(_ context.Context, _, _ uuid.UUID) (domainorganization.Membership, error) {
+			return domainorganization.Membership{
+				Role:   domainorganization.MembershipRoleApprover,
+				Status: domainorganization.MembershipStatusActive,
+			}, nil
+		},
+		getRequestFn: func(_ context.Context, _, _ uuid.UUID) (domainprocurement.Request, error) {
+			return domainprocurement.Request{
+				ID:              requestID,
+				OrganizationID:  orgID,
+				RequesterUserID: currentUser,
+				Title:           "Existing",
+				Status:          domainprocurement.RequestStatusDraft,
+				CurrencyCode:    "USD",
+			}, nil
+		},
+		submitRequestFn: func(_ context.Context, _, _ uuid.UUID, _ uuid.UUID) (domainprocurement.Request, error) {
+			return domainprocurement.Request{
+				ID:              requestID,
+				OrganizationID:  orgID,
+				RequesterUserID: currentUser,
+				Title:           "Existing",
+				Status:          domainprocurement.RequestStatusSubmitted,
+				CurrencyCode:    "USD",
+			}, nil
+		},
+	}
+
+	service := NewService(repo, fakeTxManager{
+		withinFn: func(_ context.Context, fn func(Repository) error) error {
+			return fn(repo)
+		},
+	})
+	request, err := service.SubmitRequest(context.Background(), SubmitRequestInput{
+		OrganizationID: orgID,
+		RequestID:      requestID,
+		CurrentUser:    currentUser,
+	})
+	if err != nil {
+		t.Fatalf("submit request returned error: %v", err)
+	}
+	if request.Status != domainprocurement.RequestStatusSubmitted {
+		t.Fatalf("expected submitted status, got %s", request.Status)
 	}
 }
 

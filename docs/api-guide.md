@@ -116,8 +116,9 @@ Authorization: Bearer <access-token>
 - Any active organization member can list and get vendors.
 - Only `owner`, `admin`, and `procurement_officer` can create, update, or archive vendors.
 - Any active organization member can list and get procurement requests and request items.
-- `owner`, `admin`, `procurement_officer`, and `requester` can create procurement request drafts.
-- Draft updates, item writes, submit, and cancel are allowed for manager roles or the original requester on their own request.
+- `owner`, `admin`, `procurement_officer`, `requester`, and `approver` can create procurement request drafts.
+- Draft updates, item writes, and cancel are allowed for manager roles or the original `requester`/`approver` on their own request.
+- Draft submit is restricted to the original draft starter, and that starter must currently have an active `requester` or `approver` membership.
 - Only active `owner`, `admin`, and `approver` memberships can access the procurement approval inbox.
 - Only active `owner`, `admin`, and `approver` memberships can approve or reject submitted procurement requests.
 - Any active organization member can list and get RFQs, RFQ items, and RFQ vendors.

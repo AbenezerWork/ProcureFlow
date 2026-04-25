@@ -384,7 +384,7 @@ export interface paths {
         put?: never;
         /**
          * Create a procurement request draft
-         * @description Creates a draft procurement request. Active `owner`, `admin`, `procurement_officer`, and `requester` memberships may perform this action.
+         * @description Creates a draft procurement request. Active `owner`, `admin`, `procurement_officer`, `requester`, and `approver` memberships may perform this action.
          */
         post: operations["createProcurementRequest"];
         delete?: never;
@@ -418,7 +418,7 @@ export interface paths {
         head?: never;
         /**
          * Update a draft procurement request
-         * @description Updates a draft procurement request. Manager roles or the original requester on their own request may perform this action.
+         * @description Updates a draft procurement request. Manager roles, or the original `requester`/`approver` on their own request, may perform this action.
          */
         patch: operations["updateProcurementRequest"];
         trace?: never;
@@ -440,7 +440,7 @@ export interface paths {
         put?: never;
         /**
          * Submit a draft procurement request
-         * @description Submits a draft procurement request. Manager roles or the original requester on their own request may perform this action.
+         * @description Submits a draft procurement request. Only the original draft starter may perform this action, and they must have an active `requester` or `approver` membership.
          */
         post: operations["submitProcurementRequest"];
         delete?: never;
@@ -518,7 +518,7 @@ export interface paths {
         put?: never;
         /**
          * Cancel a procurement request
-         * @description Cancels a draft or submitted procurement request. Manager roles or the original requester on their own request may perform this action.
+         * @description Cancels a draft or submitted procurement request. Manager roles, or the original `requester`/`approver` on their own request, may perform this action.
          */
         post: operations["cancelProcurementRequest"];
         delete?: never;
@@ -548,7 +548,7 @@ export interface paths {
         put?: never;
         /**
          * Add an item to a draft procurement request
-         * @description Adds an item to a draft procurement request. Manager roles or the original requester on their own request may perform this action.
+         * @description Adds an item to a draft procurement request. Manager roles, or the original `requester`/`approver` on their own request, may perform this action.
          */
         post: operations["createProcurementRequestItem"];
         delete?: never;
@@ -576,14 +576,14 @@ export interface paths {
         post?: never;
         /**
          * Delete an item from a draft procurement request
-         * @description Deletes an item from a draft procurement request. Manager roles or the original requester on their own request may perform this action.
+         * @description Deletes an item from a draft procurement request. Manager roles, or the original `requester`/`approver` on their own request, may perform this action.
          */
         delete: operations["deleteProcurementRequestItem"];
         options?: never;
         head?: never;
         /**
          * Update an item on a draft procurement request
-         * @description Updates an item on a draft procurement request. Manager roles or the original requester on their own request may perform this action.
+         * @description Updates an item on a draft procurement request. Manager roles, or the original `requester`/`approver` on their own request, may perform this action.
          */
         patch: operations["updateProcurementRequestItem"];
         trace?: never;
